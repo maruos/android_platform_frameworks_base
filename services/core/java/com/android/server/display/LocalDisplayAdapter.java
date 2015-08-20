@@ -219,6 +219,15 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     if (SystemProperties.getBoolean("persist.demo.hdmirotates", false)) {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_ROTATES_WITH_CONTENT;
                     }
+
+                    /*
+                     * maru
+                     *
+                     * Hook to toggle HDMI mirroring of the default display.
+                     */
+                    if (!SystemProperties.getBoolean("persist.maru.hdmi.mirroring", false)) {
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
+                    }
                 }
             }
             return mInfo;
