@@ -89,6 +89,14 @@ final class DisplayDeviceInfo {
     public static final int FLAG_OWN_CONTENT_ONLY = 1 << 7;
 
     /**
+     * maru
+     *
+     * Flag: Indicates that this display is reserved for use
+     * by Maru for the desktop display.
+     */
+    public static final int FLAG_MARU_DESKTOP = 1 << 31;
+
+    /**
      * Touch attachment: Display does not receive touch.
      */
     public static final int TOUCH_NONE = 0;
@@ -354,6 +362,9 @@ final class DisplayDeviceInfo {
         }
         if ((flags & FLAG_OWN_CONTENT_ONLY) != 0) {
             msg.append(", FLAG_OWN_CONTENT_ONLY");
+        }
+        if ((flags & FLAG_MARU_DESKTOP) != 0) {
+            msg.append(", FLAG_MARU_DESKTOP");
         }
         return msg.toString();
     }

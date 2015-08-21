@@ -225,8 +225,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                      *
                      * Hook to toggle HDMI mirroring of the default display.
                      */
-                    if (!SystemProperties.getBoolean("persist.maru.hdmi.mirroring", false)) {
+                    if (SystemProperties.getBoolean("persist.maru.hdmi.desktop", true)) {
+                        /* no mirroring on this display */
                         mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
+                        /* indicate this is reserved for the maru desktop */
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_MARU_DESKTOP;
                     }
                 }
             }
