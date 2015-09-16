@@ -249,6 +249,20 @@ LOCAL_SHARED_LIBRARIES := \
 	libprocessgroup \
 	libnativebridge \
 
+#--------------------------------------------------------
+# maru
+
+LOCAL_SRC_FILES += \
+	android_mperspective_PerspectiveManager.cpp
+
+LOCAL_C_INCLUDES += \
+	device/lge/hammerhead/maru/include
+
+LOCAL_SHARED_LIBRARIES += \
+	libperspective
+
+#--------------------------------------------------------
+
 ifeq ($(USE_OPENGL_RENDERER),true)
 	LOCAL_SHARED_LIBRARIES += libhwui
 endif

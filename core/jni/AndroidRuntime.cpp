@@ -191,6 +191,10 @@ extern int register_com_android_internal_net_NetworkStatsFactory(JNIEnv *env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
 
+// maru
+extern int register_android_mperspective_PerspectiveManager(JNIEnv* env);
+
+
 static AndroidRuntime* gCurRuntime = NULL;
 
 static void doThrow(JNIEnv* env, const char* exc, const char* msg = NULL)
@@ -1384,6 +1388,9 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_animation_PropertyValuesHolder),
     REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
     REG_JNI(register_com_android_internal_net_NetworkStatsFactory),
+
+    // maru
+    REG_JNI(register_android_mperspective_PerspectiveManager),
 };
 
 /*
