@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 /**
+ * Copyright (c) 2015, Preetam D'Souza (modifications under "Maru")
  * Copyright (c) 2009, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -916,4 +917,17 @@
 
     <!-- Hide quick settings tile confirmation button -->
     <string name="quick_settings_reset_confirmation_button">Hide</string>
+
+    <!-- Maru -->
+
+    <!-- QuickSettings: MDesktop [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_mdesktop_mode_label">Desktop</string>
+
+    <!-- Announcement made when desktop changes to disabled (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_qs_mdesktop_changed_off">Maru desktop turned off.</string>
+    <!-- Announcement made when desktop changes to enabled (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_qs_mdesktop_changed_on">Maru desktop turned on.</string>
+
+    <!-- /Maru -->
+
 </resources>
