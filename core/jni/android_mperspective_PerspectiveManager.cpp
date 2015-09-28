@@ -40,9 +40,11 @@ class PerspectiveClient {
 public:
     PerspectiveClient(sp<IPerspectiveService> proxy)
         : mProxy(proxy) {
-        // listen for remote death
-        mDeathRecipient = new MDeathRecipient(*const_cast<PerspectiveClient*>(this));
-        mProxy->asBinder()->linkToDeath(mDeathRecipient);
+        if (proxy != NULL) {
+            // listen for remote death
+            mDeathRecipient = new MDeathRecipient(*const_cast<PerspectiveClient*>(this));
+            mProxy->asBinder()->linkToDeath(mDeathRecipient);
+        }
     }
 
     void remoteDied() {
