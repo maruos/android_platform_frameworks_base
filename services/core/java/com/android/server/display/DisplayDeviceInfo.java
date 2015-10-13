@@ -91,10 +91,10 @@ final class DisplayDeviceInfo {
     /**
      * maru
      *
-     * Flag: Indicates that this display is reserved for use
-     * by Maru for the desktop display.
+     * Flag: Indicates that this display should be considered the
+     * default external display.
      */
-    public static final int FLAG_MARU_DESKTOP = 1 << 31;
+    public static final int FLAG_DEFAULT_EXTERNAL_DISPLAY = 1 << 31;
 
     /**
      * Touch attachment: Display does not receive touch.
@@ -363,8 +363,8 @@ final class DisplayDeviceInfo {
         if ((flags & FLAG_OWN_CONTENT_ONLY) != 0) {
             msg.append(", FLAG_OWN_CONTENT_ONLY");
         }
-        if ((flags & FLAG_MARU_DESKTOP) != 0) {
-            msg.append(", FLAG_MARU_DESKTOP");
+        if ((flags & FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0) {
+            msg.append(", FLAG_DEFAULT_EXTERNAL_DISPLAY");
         }
         return msg.toString();
     }
