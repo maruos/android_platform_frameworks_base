@@ -81,4 +81,13 @@ interface IDisplayManager {
 
     // Get a stable metric for the device's display size. No permissions required.
     Point getStableDisplaySize();
+
+    /**
+     * maru
+     *
+     * Mirroring support
+     */
+     void enableMirroring();
+     void disableMirroring();
+     boolean isMirroringEnabled();
 }

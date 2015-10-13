@@ -104,6 +104,14 @@ final class DisplayDeviceInfo {
     public static final int FLAG_DESTROY_CONTENT_ON_REMOVAL = 1 << 10;
 
     /**
+     * maru
+     *
+     * Flag: Indicates that this display should be considered the
+     * default external display.
+     */
+    public static final int FLAG_DEFAULT_EXTERNAL_DISPLAY = 1 << 31;
+
+    /**
      * Touch attachment: Display does not receive touch.
      */
     public static final int TOUCH_NONE = 0;
@@ -442,6 +450,9 @@ final class DisplayDeviceInfo {
         }
         if ((flags & FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD) != 0) {
             msg.append(", FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD");
+        }
+        if ((flags & FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0) {
+            msg.append(", FLAG_DEFAULT_EXTERNAL_DISPLAY");
         }
         return msg.toString();
     }
