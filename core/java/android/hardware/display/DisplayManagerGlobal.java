@@ -257,6 +257,31 @@ public final class DisplayManagerGlobal {
         }
     }
 
+    public void enableMirroring() {
+        try {
+            mDm.enableMirroring();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to enable mirroring with display manager service.", ex);
+        }
+    }
+
+    public void disableMirroring() {
+        try {
+            mDm.disableMirroring();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to disable mirroring with display manager service.", ex);
+        }
+    }
+
+    public boolean isMirroringEnabled() {
+        try {
+            return mDm.isMirroringEnabled();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to get mirroring configuration from display manager service.", ex);
+        }
+        return false;
+    }
+
     public void startWifiDisplayScan() {
         synchronized (mLock) {
             if (mWifiDisplayScanNestCount++ == 0) {

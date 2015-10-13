@@ -102,6 +102,14 @@ public final class Display {
     public static final int INVALID_DISPLAY = -1;
 
     /**
+     * maru
+     *
+     * Fixed display id for the default external display. Currently only HDMI.
+     * @hide
+     */
+    public static final int DEFAULT_EXTERNAL_DISPLAY = 1;
+
+    /**
      * Display flag: Indicates that the display supports compositing content
      * that is stored in protected graphics buffers.
      * <p>

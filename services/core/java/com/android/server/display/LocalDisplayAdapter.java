@@ -423,6 +423,16 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                                 com.android.internal.R.bool.config_localDisplaysMirrorContent)) {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
                     }
+
+                    /*
+                     * maru
+                     *
+                     * Debug hook to toggle maru changes.
+                     */
+                    if (SystemProperties.getBoolean("persist.maru.desktop.hdmi", true)) {
+                        /* HDMI displays are the default external display */
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY;
+                    }
                 }
             }
             return mInfo;

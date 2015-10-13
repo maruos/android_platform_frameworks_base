@@ -150,6 +150,11 @@ public final class DisplayManagerService extends SystemService {
     // services should be started.  This option may disable certain display adapters.
     public boolean mOnlyCore;
 
+    /**
+     * maru
+     */
+    private boolean mMirroringEnabled;
+
     // True if the display manager service should pretend there is only one display
     // and only tell applications about the existence of the default logical display.
     // The display manager can still mirror content to secondary displays but applications
@@ -170,7 +175,7 @@ public final class DisplayManagerService extends SystemService {
     // List of all logical displays indexed by logical display id.
     private final SparseArray<LogicalDisplay> mLogicalDisplays =
             new SparseArray<LogicalDisplay>();
-    private int mNextNonDefaultDisplayId = Display.DEFAULT_DISPLAY + 1;
+    private int mNextNonDefaultDisplayId = Display.DEFAULT_EXTERNAL_DISPLAY + 1;
 
     // List of all display transaction listeners.
     private final CopyOnWriteArrayList<DisplayTransactionListener> mDisplayTransactionListeners =
@@ -445,6 +450,22 @@ public final class DisplayManagerService extends SystemService {
         synchronized (mSyncRoot) {
             mCallbacks.remove(record.mPid);
             stopWifiDisplayScanLocked(record);
+        }
+    }
+
+    private void setMirroringEnabledInternal(boolean enabled) {
+        synchronized(mSyncRoot) {
+            if (mMirroringEnabled != enabled) {
+                Slog.d(TAG, "setMirroringEnabledInternal -> " + enabled);
+                mMirroringEnabled = enabled;
+                scheduleTraversalLocked(false);
+            }
+        }
+    }
+
+    private boolean isMirroringEnabledInternal() {
+        synchronized(mSyncRoot) {
+            return mMirroringEnabled;
         }
     }
 
@@ -801,6 +822,8 @@ public final class DisplayManagerService extends SystemService {
         DisplayDeviceInfo deviceInfo = device.getDisplayDeviceInfoLocked();
         boolean isDefault = (deviceInfo.flags
                 & DisplayDeviceInfo.FLAG_DEFAULT_DISPLAY) != 0;
+        boolean isDefaultExternalDisplay = (deviceInfo.flags
+                & DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0;
         if (isDefault && mLogicalDisplays.get(Display.DEFAULT_DISPLAY) != null) {
             Slog.w(TAG, "Ignoring attempt to add a second default display: " + deviceInfo);
             isDefault = false;
@@ -812,7 +835,7 @@ public final class DisplayManagerService extends SystemService {
             return null;
         }
 
-        final int displayId = assignDisplayIdLocked(isDefault);
+        final int displayId = assignDisplayIdLocked(isDefault, isDefaultExternalDisplay);
         final int layerStack = assignLayerStackLocked(displayId);
 
         LogicalDisplay display = new LogicalDisplay(displayId, layerStack, device);
@@ -835,8 +858,14 @@ public final class DisplayManagerService extends SystemService {
         return display;
     }
 
-    private int assignDisplayIdLocked(boolean isDefault) {
-        return isDefault ? Display.DEFAULT_DISPLAY : mNextNonDefaultDisplayId++;
+    private int assignDisplayIdLocked(boolean isDefault, boolean isDefaultExternalDisplay) {
+        if (isDefault) {
+            return Display.DEFAULT_DISPLAY;
+        } else if (isDefaultExternalDisplay) {
+            return Display.DEFAULT_EXTERNAL_DISPLAY;
+        } else {
+            return mNextNonDefaultDisplayId++;
+        }
     }
 
     private int assignLayerStackLocked(int displayId) {
@@ -949,7 +978,7 @@ public final class DisplayManagerService extends SystemService {
         // Find the logical display that the display device is showing.
         // Certain displays only ever show their own content.
         LogicalDisplay display = findLogicalDisplayForDeviceLocked(device);
-        if (!ownContent) {
+        if (!ownContent && isMirroringEnabledInternal()) {
             if (display != null && !display.hasContentLocked()) {
                 // If the display does not have any content of its own, then
                 // automatically mirror the default logical display contents.
@@ -1252,6 +1281,36 @@ public final class DisplayManagerService extends SystemService {
             final long token = Binder.clearCallingIdentity();
             try {
                 registerCallbackInternal(callback, callingPid);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public void enableMirroring() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                setMirroringEnabledInternal(true);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public void disableMirroring() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                setMirroringEnabledInternal(false);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public boolean isMirroringEnabled() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return isMirroringEnabledInternal();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
