@@ -1938,6 +1938,14 @@
     <!-- Text body for dialog alerting user that their phone last shut down because it got too hot. [CHAR LIMIT=450] -->
     <string name="thermal_shutdown_dialog_message">Your phone was too hot, so it turned off to cool down. Your phone is now running normally.\n\nYour phone may get too hot if you:\n\t&#8226; Use resource-intensive apps (such as gaming, video, or navigation apps)\n\t&#8226; Download or upload large files\n\t&#8226; Use your phone in high temperatures</string>
 
+    <!-- QuickSettings: MMirror [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_mirroring_mode_label">Mirror screen</string>
+
+    <!-- Announcement made when mirroring changes to disabled (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_qs_mirroring_changed_off">Screen mirroring turned off.</string>
+    <!-- Announcement made when mirroring changes to enabled (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_qs_mirroring_changed_on">Screen mirroring turned on.</string>
+
     <!-- Title for notification (and dialog) that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=30] -->
     <string name="high_temp_title">Phone is getting warm</string>
     <!-- Message body for notification that user's phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=100] -->
