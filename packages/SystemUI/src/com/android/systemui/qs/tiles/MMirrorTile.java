@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2015 Preetam D'Souza
  *
- * Inspired by AirplaneModeTile.java
+ * QuickSettings HDMI mirroring toggle.
  *
  */
 
@@ -23,15 +23,14 @@ import com.android.systemui.R;
 import com.android.systemui.qs.GlobalSetting;
 import com.android.systemui.qs.QSTile;
 
-/** Quick settings tile: Maru Desktop **/
-public class MDesktopTile extends QSTile<QSTile.BooleanState> {
-    private static final String TAG = "MDesktopTile";
+/** Quick settings tile: Mirror screen **/
+public class MMirrorTile extends QSTile<QSTile.BooleanState> {
+    private static final String TAG = "MMirrorTile";
 
-    private static final int mDisabledIcon = R.drawable.ic_mdesktop_disabled;
-    private static final int mEnabledIcon = R.drawable.ic_mdesktop_enabled;
+    private static final int mDisabledIcon = R.drawable.ic_mirroring_disabled;
+    private static final int mEnabledIcon = R.drawable.ic_mirroring_enabled;
 
     private final DisplayManager mDisplayManager;
-    private final PerspectiveManager mPerspectiveManager;
 
     private final MDisplayListener mDisplayListener;
     // com.android.internal.R.string.display_manager_hdmi_display_name
@@ -41,12 +40,11 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
 
     private boolean mListening = false;
 
-    public MDesktopTile(Host host) {
+    public MMirrorTile(Host host) {
         super(host);
 
         mDisplayManager = (DisplayManager) host.getContext()
                 .getSystemService(Context.DISPLAY_SERVICE);
-        mPerspectiveManager = new PerspectiveManager();
 
         mDisplayListener = new MDisplayListener();
         mHDMIDisplayName = host.getContext().getResources()
@@ -61,34 +59,31 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
     @Override
     public void handleClick() {
         if (mState.value) {
-            Log.d(TAG, "calling stop()!");
-            boolean res = mPerspectiveManager.stopDesktopPerspective();
-            Log.d(TAG, "...returned " + res);
+            Log.d(TAG, "disabling mirroring!");
+            mDisplayManager.disableMirroring();
         } else {
-            Log.d(TAG, "calling start()!");
-            boolean res = mPerspectiveManager.startDesktopPerspective();
-            Log.d(TAG, "...returned " + res);
+            Log.d(TAG, "enabling mirroring!");
+            mDisplayManager.enableMirroring();
         }
         refreshState();
     }
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
-        final boolean isRunning = mPerspectiveManager.isDesktopRunning();
         final boolean hasHdmiDisplay = mHdmiDisplayId != -1;
         Log.d(TAG, "hasHdmiDisplay: " + hasHdmiDisplay);
-        state.visible = true; //hasHdmiDisplay || isRunning;
-        state.value = isRunning;
-        state.label = mContext.getString(R.string.quick_settings_mdesktop_mode_label);
+        state.visible = true; //hasHdmiDisplay;
+        state.value = mDisplayManager.isMirroringEnabled();
+        state.label = mContext.getString(R.string.quick_settings_mirroring_mode_label);
         state.icon = ResourceIcon.get(state.value ? mEnabledIcon : mDisabledIcon);
     }
 
     @Override
     protected String composeChangeAnnouncement() {
         if (mState.value) {
-            return mContext.getString(R.string.accessibility_qs_mdesktop_changed_on);
+            return mContext.getString(R.string.accessibility_qs_mirroring_changed_on);
         } else {
-            return mContext.getString(R.string.accessibility_qs_mdesktop_changed_off);
+            return mContext.getString(R.string.accessibility_qs_mirroring_changed_off);
         }
     }
 

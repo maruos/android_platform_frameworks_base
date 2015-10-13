@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Preetam D'Souza (mdesktop modifications)
+ * Copyright (C) 2015 Preetam D'Souza (desktop, mirroring)
  * Copyright (C) 2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +43,7 @@ import com.android.systemui.qs.tiles.LocationTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
 import com.android.systemui.qs.tiles.WifiTile;
 import com.android.systemui.qs.tiles.MDesktopTile;
+import com.android.systemui.qs.tiles.MMirrorTile;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.policy.BluetoothController;
 import com.android.systemui.statusbar.policy.CastController;
@@ -263,6 +264,7 @@ public class QSTileHost implements QSTile.Host {
         else if (tileSpec.equals("location")) return new LocationTile(this);
         else if (tileSpec.equals("cast")) return new CastTile(this);
         else if (tileSpec.equals("hotspot")) return new HotspotTile(this);
+        else if (tileSpec.equals("mmirror")) return new MMirrorTile(this);
         else if (tileSpec.equals("mdesktop")) return new MDesktopTile(this);
         else if (tileSpec.startsWith(IntentTile.PREFIX)) return IntentTile.create(this,tileSpec);
         else throw new IllegalArgumentException("Bad tile spec: " + tileSpec);
