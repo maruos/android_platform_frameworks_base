@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2006 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,6 +89,7 @@ import com.android.server.media.MediaRouterService;
 import com.android.server.media.MediaUpdateService;
 import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
+import com.android.server.mperspective.PerspectiveService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
 import com.android.server.net.watchlist.NetworkWatchlistService;
@@ -1356,6 +1359,15 @@ public final class SystemServer {
                 Slog.e(TAG, "Failure starting HardwarePropertiesManagerService", e);
             }
             traceEnd();
+            if (!mOnlyCore) {
+                traceBeginAndSlog("StartPerspectiveService");
+                try {
+                    mSystemServiceManager.startService(PerspectiveService.Lifecycle.class);
+                } catch (Throwable e) {
+                    reportWtf("starting PerspectiveService", e);
+                }
+                traceEnd();
+            }
 
             traceBeginAndSlog("StartTwilightService");
             mSystemServiceManager.startService(TwilightService.class);

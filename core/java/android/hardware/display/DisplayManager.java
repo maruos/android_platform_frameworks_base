@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -423,6 +425,33 @@ public final class DisplayManager {
      */
     public void unregisterDisplayListener(DisplayListener listener) {
         mGlobal.unregisterDisplayListener(listener);
+    }
+
+    /**
+     * maru: enable screen mirroring
+     *
+     * @hide
+     */
+    public void enablePhoneMirroring() {
+        mGlobal.enablePhoneMirroring();
+    }
+
+    /**
+     * maru: disable screen mirroring
+     *
+     * @hide
+     */
+    public void disablePhoneMirroring() {
+        mGlobal.disablePhoneMirroring();
+    }
+
+    /**
+     * maru: check if screen mirroring is enabled or not
+     *
+     * @hide
+     */
+    public boolean isPhoneMirroringEnabled() {
+        return mGlobal.isPhoneMirroringEnabled();
     }
 
     /**

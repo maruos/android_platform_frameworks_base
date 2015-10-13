@@ -1,4 +1,6 @@
 // Copyright (C) 2016 The Android Open Source Project
+// Copyright (C) 2015-2016 Preetam J. D'Souza
+// Copyright (C) 2016-2021 The Maru OS Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -184,6 +186,8 @@ java_library {
         "core/java/android/hardware/radio/ITunerCallback.aidl",
         "core/java/android/hardware/soundtrigger/IRecognitionStatusCallback.aidl",
         "core/java/android/hardware/usb/IUsbManager.aidl",
+        "core/java/android/mperspective/IPerspectiveService.aidl",
+        "core/java/android/mperspective/IPerspectiveServiceCallback.aidl",
         "core/java/android/net/ICaptivePortal.aidl",
         "core/java/android/net/IConnectivityManager.aidl",
         "core/java/android/net/IIpConnectivityMetrics.aidl",
