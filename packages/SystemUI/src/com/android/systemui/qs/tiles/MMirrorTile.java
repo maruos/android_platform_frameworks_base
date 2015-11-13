@@ -7,20 +7,12 @@
 
 package com.android.systemui.qs.tiles;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.net.ConnectivityManager;
-import android.provider.Settings.Global;
-import android.util.Log;
-
-import android.mperspective.PerspectiveManager;
 import android.hardware.display.DisplayManager;
+import android.util.Log;
 import android.view.Display;
 
 import com.android.systemui.R;
-import com.android.systemui.qs.GlobalSetting;
 import com.android.systemui.qs.QSTile;
 
 /** Quick settings tile: Mirror screen **/
@@ -33,11 +25,8 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     private final DisplayManager mDisplayManager;
 
     private final MDisplayListener mDisplayListener;
-    // com.android.internal.R.string.display_manager_hdmi_display_name
-    private final String mHDMIDisplayName;
     // track the hdmi display id to check if it has been removed later
     private int mHdmiDisplayId = -1;
-
     private boolean mListening = false;
 
     public MMirrorTile(Host host) {
@@ -47,8 +36,6 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
                 .getSystemService(Context.DISPLAY_SERVICE);
 
         mDisplayListener = new MDisplayListener();
-        mHDMIDisplayName = host.getContext().getResources()
-                .getString(com.android.internal.R.string.display_manager_hdmi_display_name);
     }
 
     @Override
@@ -71,8 +58,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final boolean hasHdmiDisplay = mHdmiDisplayId != -1;
-        Log.d(TAG, "hasHdmiDisplay: " + hasHdmiDisplay);
-        state.visible = true; //hasHdmiDisplay;
+        state.visible = hasHdmiDisplay;
         state.value = mDisplayManager.isMirroringEnabled();
         state.label = mContext.getString(R.string.quick_settings_mirroring_mode_label);
         state.icon = ResourceIcon.get(state.value ? mEnabledIcon : mDisabledIcon);
@@ -96,6 +82,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
 
         if (listening) {
             Log.d(TAG, "registering mDisplayListener");
+            mDisplayListener.sync();
             mDisplayManager.registerDisplayListener(mDisplayListener, null);
         } else {
             Log.d(TAG, "unregistering mDisplayListener");
@@ -109,8 +96,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
         public void onDisplayAdded(int displayId) {
             Display display = mDisplayManager.getDisplay(displayId);
             Log.d(TAG, "Display added: " + display);
-            final boolean hdmiDisplayAdded = mHDMIDisplayName.equals(display.getName()) &&
-                        display.getState() == Display.STATE_ON;
+            final boolean hdmiDisplayAdded = display.getType() == Display.TYPE_HDMI;
 
             if (hdmiDisplayAdded) {
                 if (mHdmiDisplayId == -1) {
@@ -132,5 +118,24 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
 
         @Override
         public void onDisplayChanged(int displayId) { /* no-op */ }
+
+        /**
+         * We may miss a display event since listeners are unregistered
+         * when the QS panel is hidden.
+         *
+         * Call this before registering to make sure the initial
+         * state is up-to-date.
+         */
+        public void sync() {
+            mHdmiDisplayId = -1;
+            Display[] displays = mDisplayManager
+                    .getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
+            for (Display display : displays) {
+                if (display.getType() == Display.TYPE_HDMI) {
+                    mHdmiDisplayId = display.getDisplayId();
+                    break;
+                }
+            }
+        }
     }
 }
