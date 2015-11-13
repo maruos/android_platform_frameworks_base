@@ -7,20 +7,13 @@
 
 package com.android.systemui.qs.tiles;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.net.ConnectivityManager;
-import android.provider.Settings.Global;
-import android.util.Log;
-
-import android.mperspective.PerspectiveManager;
 import android.hardware.display.DisplayManager;
+import android.mperspective.PerspectiveManager;
+import android.util.Log;
 import android.view.Display;
 
 import com.android.systemui.R;
-import com.android.systemui.qs.GlobalSetting;
 import com.android.systemui.qs.QSTile;
 
 /** Quick settings tile: Maru Desktop **/
@@ -34,11 +27,8 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
     private final PerspectiveManager mPerspectiveManager;
 
     private final MDisplayListener mDisplayListener;
-    // com.android.internal.R.string.display_manager_hdmi_display_name
-    private final String mHDMIDisplayName;
     // track the hdmi display id to check if it has been removed later
     private int mHdmiDisplayId = -1;
-
     private boolean mListening = false;
 
     public MDesktopTile(Host host) {
@@ -46,11 +36,13 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
 
         mDisplayManager = (DisplayManager) host.getContext()
                 .getSystemService(Context.DISPLAY_SERVICE);
-        mPerspectiveManager = new PerspectiveManager();
+        mPerspectiveManager = (PerspectiveManager) host.getContext()
+                .getSystemService(Context.PERSPECTIVE_SERVICE);
+
+        // TODO: PerspectiveListener
 
         mDisplayListener = new MDisplayListener();
-        mHDMIDisplayName = host.getContext().getResources()
-                .getString(com.android.internal.R.string.display_manager_hdmi_display_name);
+        mDisplayManager.registerDisplayListener(mDisplayListener, null);
     }
 
     @Override
@@ -61,13 +53,9 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
     @Override
     public void handleClick() {
         if (mState.value) {
-            Log.d(TAG, "calling stop()!");
-            boolean res = mPerspectiveManager.stopDesktopPerspective();
-            Log.d(TAG, "...returned " + res);
+            mPerspectiveManager.stopDesktopPerspective();
         } else {
-            Log.d(TAG, "calling start()!");
-            boolean res = mPerspectiveManager.startDesktopPerspective();
-            Log.d(TAG, "...returned " + res);
+            mPerspectiveManager.startDesktopPerspective();
         }
         refreshState();
     }
@@ -114,8 +102,7 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
         public void onDisplayAdded(int displayId) {
             Display display = mDisplayManager.getDisplay(displayId);
             Log.d(TAG, "Display added: " + display);
-            final boolean hdmiDisplayAdded = mHDMIDisplayName.equals(display.getName()) &&
-                        display.getState() == Display.STATE_ON;
+            final boolean hdmiDisplayAdded = display.getType() == Display.TYPE_HDMI;
 
             if (hdmiDisplayAdded) {
                 if (mHdmiDisplayId == -1) {
@@ -138,4 +125,5 @@ public class MDesktopTile extends QSTile<QSTile.BooleanState> {
         @Override
         public void onDisplayChanged(int displayId) { /* no-op */ }
     }
+
 }
