@@ -115,3 +115,17 @@ LOCAL_SHARED_LIBRARIES += \
 LOCAL_STATIC_LIBRARIES += \
     android.hardware.broadcastradio@1.1-utils-lib \
     libscrypt_static \
+
+#---------------------------------------------------------------------------
+# maru
+
+LOCAL_SRC_FILES += \
+    $(LOCAL_REL_DIR)/com_android_server_mperspective_PerspectiveService.cpp
+
+LOCAL_C_INCLUDES += \
+    vendor/maruos/include
+
+LOCAL_SHARED_LIBRARIES += \
+    libperspective
+
+#---------------------------------------------------------------------------
