@@ -4462,4 +4462,12 @@
 
     <!-- Label used by Telephony code, assigned as the display name for conference calls [CHAR LIMIT=60] -->
     <string name="conference_call">Conference Call</string>
+
+    <!-- maru -->
+    <string name="desktop_notification_title_starting">Maru Desktop starting...</string>
+    <string name="desktop_notification_title_stopping">Maru Desktop stopping...</string>
+    <string name="desktop_notification_title_running">Maru Desktop running</string>
+    <string name="desktop_notification_msg">Touch to manage desktop settings.</string>
+    <!-- /maru -->
+
 </resources>

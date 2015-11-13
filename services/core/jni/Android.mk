@@ -75,3 +75,16 @@ LOCAL_SHARED_LIBRARIES += \
     libGLESv2 \
     libnetutils \
 
+#---------------------------------------------------------------------------
+# maru
+
+LOCAL_SRC_FILES += \
+    $(LOCAL_REL_DIR)/com_android_server_mperspective_PerspectiveService.cpp
+
+LOCAL_C_INCLUDES += \
+    vendor/maruos/include
+
+LOCAL_SHARED_LIBRARIES += \
+    libperspective
+
+#---------------------------------------------------------------------------

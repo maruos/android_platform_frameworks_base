@@ -2749,4 +2749,13 @@
   <java-symbol type="bool" name="use_lock_pattern_drawable" />
   <java-symbol type="drawable" name="lockscreen_notselected" />
   <java-symbol type="drawable" name="lockscreen_selected" />
+
+  <!-- maru -->
+  <!-- From PerspectiveService -->
+  <java-symbol type="string" name="desktop_notification_title_starting" />
+  <java-symbol type="string" name="desktop_notification_title_stopping" />
+  <java-symbol type="string" name="desktop_notification_title_running" />
+  <java-symbol type="string" name="desktop_notification_msg" />
+  <java-symbol type="drawable" name="ic_mdesktop" />
+  <!-- /maru -->
 </resources>

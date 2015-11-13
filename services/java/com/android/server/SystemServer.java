@@ -76,6 +76,7 @@ import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
+import com.android.server.mperspective.PerspectiveService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
 import com.android.server.notification.NotificationManagerService;
@@ -1016,6 +1017,14 @@ public final class SystemServer {
                     Slog.e(TAG, "Failure starting HardwarePropertiesManagerService", e);
                 }
                 Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+            }
+
+            if (!disableNonCoreServices) {
+                try {
+                    mSystemServiceManager.startService(PerspectiveService.Lifecycle.class);
+                } catch (Throwable e) {
+                    reportWtf("starting PerspectiveService", e);
+                }
             }
 
             mSystemServiceManager.startService(TwilightService.class);
