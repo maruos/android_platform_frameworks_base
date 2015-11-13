@@ -2916,6 +2916,16 @@ public abstract class Context {
     public static final String MEDIA_PROJECTION_SERVICE = "media_projection";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a {@link
+     * android.mperspective.PerspectiveManager} instance for managing
+     * perspectives.
+     * @see #getSystemService
+     * @see android.mperspective.PerspectiveManager
+     * @hide
+     */
+    public static final String PERSPECTIVE_SERVICE = "perspective";
+
+    /**
      * Determine whether the given permission is allowed for a particular
      * process and user ID running in the system.
      *

@@ -74,6 +74,7 @@ import com.android.server.lights.LightsService;
 import com.android.server.media.MediaRouterService;
 import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
+import com.android.server.mperspective.PerspectiveService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
 import com.android.server.notification.NotificationManagerService;
@@ -829,6 +830,14 @@ public final class SystemServer {
                     ServiceManager.addService(Context.SERIAL_SERVICE, serial);
                 } catch (Throwable e) {
                     Slog.e(TAG, "Failure starting SerialService", e);
+                }
+            }
+
+            if (!disableNonCoreServices) {
+                try {
+                    mSystemServiceManager.startService(PerspectiveService.Lifecycle.class);
+                } catch (Throwable e) {
+                    reportWtf("starting PerspectiveService", e);
                 }
             }
 

@@ -5,7 +5,7 @@
  *
  */
 
-#define LOG_TAG "PerspectiveManagerJNI"
+#define LOG_TAG "PerspectiveServiceJNI"
 
 #include "JNIHelp.h"
 
@@ -119,12 +119,12 @@ static JNINativeMethod gMethods[] = {
             (void *)nativeIsRunning }
 };
 
-int register_android_mperspective_PerspectiveManager(JNIEnv* env) {
-    int res = jniRegisterNativeMethods(env, "android/mperspective/PerspectiveManager",
+int register_android_server_mperspective_PerspectiveService(JNIEnv* env) {
+    int res = jniRegisterNativeMethods(env, "com/android/server/mperspective/PerspectiveService",
             gMethods, NELEM(gMethods));
     LOG_ALWAYS_FATAL_IF(res < 0, "Unable to register native methods.");
 
-    jclass clazz = env->FindClass("android/mperspective/PerspectiveManager");
+    jclass clazz = env->FindClass("com/android/server/mperspective/PerspectiveService");
     gPerspectiveManagerClassInfo.mNativeClient = env->GetFieldID(clazz, "mNativeClient", "J");
 
     return res;

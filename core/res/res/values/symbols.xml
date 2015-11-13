@@ -1720,6 +1720,8 @@
   <java-symbol type="string" name="data_usage_wifi_limit_snoozed_title" />
   <java-symbol type="string" name="data_usage_wifi_limit_title" />
   <java-symbol type="string" name="default_wallpaper_component" />
+
+
   <java-symbol type="string" name="dlg_ok" />
   <java-symbol type="string" name="factorytest_failed" />
   <java-symbol type="string" name="factorytest_no_action" />
@@ -2157,4 +2159,13 @@
   <java-symbol type="bool" name="config_use_sim_language_file" />
   <java-symbol type="bool" name="config_LTE_eri_for_network_name" />
   <java-symbol type="bool" name="config_defaultInTouchMode" />
+
+  <!-- maru -->
+  <!-- From PerspectiveService -->
+  <java-symbol type="string" name="desktop_notification_title_starting" />
+  <java-symbol type="string" name="desktop_notification_title_stopping" />
+  <java-symbol type="string" name="desktop_notification_title_running" />
+  <java-symbol type="string" name="desktop_notification_msg" />
+  <java-symbol type="drawable" name="ic_mdesktop" />
+  <!-- /maru -->
 </resources>

@@ -19,6 +19,8 @@ package android.app;
 import android.app.usage.IUsageStatsManager;
 import android.app.usage.UsageStatsManager;
 import android.appwidget.AppWidgetManager;
+import android.mperspective.IPerspectiveService;
+import android.mperspective.PerspectiveManager;
 import android.os.Build;
 import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
@@ -587,6 +589,12 @@ class ContextImpl extends Context {
                 public Object createService(ContextImpl ctx) {
                     IBinder b = ServiceManager.getService(SERIAL_SERVICE);
                     return new SerialManager(ctx, ISerialManager.Stub.asInterface(b));
+                }});
+
+        registerService(PERSPECTIVE_SERVICE, new ServiceFetcher() {
+                public Object createService(ContextImpl ctx) {
+                    IBinder b = ServiceManager.getService(PERSPECTIVE_SERVICE);
+                    return new PerspectiveManager(IPerspectiveService.Stub.asInterface(b));
                 }});
 
         registerService(VIBRATOR_SERVICE, new ServiceFetcher() {
