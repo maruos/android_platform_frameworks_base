@@ -80,7 +80,7 @@ interface IDisplayManager {
      *
      * Mirroring support
      */
-     void enableMirroring();
-     void disableMirroring();
-     boolean isMirroringEnabled();
+     void enableHdmiMirroring();
+     void disableHdmiMirroring();
+     boolean isHdmiMirroringEnabled();
 }

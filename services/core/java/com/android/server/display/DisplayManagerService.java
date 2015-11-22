@@ -46,7 +46,6 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.text.TextUtils;
-import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
@@ -152,7 +151,7 @@ public final class DisplayManagerService extends SystemService {
     /**
      * maru
      */
-    private boolean mMirroringEnabled;
+    private boolean mHdmiMirroringEnabled;
 
     // True if the display manager service should pretend there is only one display
     // and only tell applications about the existence of the default logical display.
@@ -412,19 +411,19 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private void setMirroringEnabledInternal(boolean enabled) {
+    private void setHdmiMirroringEnabledInternal(boolean enabled) {
         synchronized(mSyncRoot) {
-            if (mMirroringEnabled != enabled) {
-                Slog.d(TAG, "setMirroringEnabledInternal -> " + enabled);
-                mMirroringEnabled = enabled;
+            if (mHdmiMirroringEnabled != enabled) {
+                Slog.d(TAG, "setHdmiMirroringEnabledInternal -> " + enabled);
+                mHdmiMirroringEnabled = enabled;
                 scheduleTraversalLocked(false);
             }
         }
     }
 
-    private boolean isMirroringEnabledInternal() {
+    private boolean isHdmiMirroringEnabledInternal() {
         synchronized(mSyncRoot) {
-            return mMirroringEnabled;
+            return mHdmiMirroringEnabled;
         }
     }
 
@@ -873,14 +872,20 @@ public final class DisplayManagerService extends SystemService {
         // Find the logical display that the display device is showing.
         // Certain displays only ever show their own content.
         LogicalDisplay display = findLogicalDisplayForDeviceLocked(device);
-        if (!ownContent && isMirroringEnabledInternal()) {
-            if (display != null && !display.hasContentLocked()) {
-                // If the display does not have any content of its own, then
-                // automatically mirror the default logical display contents.
-                display = null;
-            }
-            if (display == null) {
+        if ((info.flags & DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0) {
+            if (isHdmiMirroringEnabledInternal()) {
                 display = mLogicalDisplays.get(Display.DEFAULT_DISPLAY);
+            }
+        } else { // stock logic
+            if (!ownContent) {
+                if (display != null && !display.hasContentLocked()) {
+                    // If the display does not have any content of its own, then
+                    // automatically mirror the default logical display contents.
+                    display = null;
+                }
+                if (display == null) {
+                    display = mLogicalDisplays.get(Display.DEFAULT_DISPLAY);
+                }
             }
         }
 
@@ -1178,30 +1183,30 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
-        public void enableMirroring() {
+        public void enableHdmiMirroring() {
             final long token = Binder.clearCallingIdentity();
             try {
-                setMirroringEnabledInternal(true);
+                setHdmiMirroringEnabledInternal(true);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override // Binder call
-        public void disableMirroring() {
+        public void disableHdmiMirroring() {
             final long token = Binder.clearCallingIdentity();
             try {
-                setMirroringEnabledInternal(false);
+                setHdmiMirroringEnabledInternal(false);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override // Binder call
-        public boolean isMirroringEnabled() {
+        public boolean isHdmiMirroringEnabled() {
             final long token = Binder.clearCallingIdentity();
             try {
-                return isMirroringEnabledInternal();
+                return isHdmiMirroringEnabledInternal();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
