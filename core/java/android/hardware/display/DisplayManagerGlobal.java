@@ -257,25 +257,25 @@ public final class DisplayManagerGlobal {
         }
     }
 
-    public void enableMirroring() {
+    public void enableHdmiMirroring() {
         try {
-            mDm.enableMirroring();
+            mDm.enableHdmiMirroring();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to enable mirroring with display manager service.", ex);
         }
     }
 
-    public void disableMirroring() {
+    public void disableHdmiMirroring() {
         try {
-            mDm.disableMirroring();
+            mDm.disableHdmiMirroring();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to disable mirroring with display manager service.", ex);
         }
     }
 
-    public boolean isMirroringEnabled() {
+    public boolean isHdmiMirroringEnabled() {
         try {
-            return mDm.isMirroringEnabled();
+            return mDm.isHdmiMirroringEnabled();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to get mirroring configuration from display manager service.", ex);
         }
