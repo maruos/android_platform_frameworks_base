@@ -364,8 +364,8 @@ public final class DisplayManager {
      *
      * @hide
      */
-    public void enableMirroring() {
-        mGlobal.enableMirroring();
+    public void enableHdmiMirroring() {
+        mGlobal.enableHdmiMirroring();
     }
 
     /**
@@ -373,8 +373,8 @@ public final class DisplayManager {
      *
      * @hide
      */
-    public void disableMirroring() {
-        mGlobal.disableMirroring();
+    public void disableHdmiMirroring() {
+        mGlobal.disableHdmiMirroring();
     }
 
     /**
@@ -382,8 +382,8 @@ public final class DisplayManager {
      *
      * @hide
      */
-    public boolean isMirroringEnabled() {
-        return mGlobal.isMirroringEnabled();
+    public boolean isHdmiMirroringEnabled() {
+        return mGlobal.isHdmiMirroringEnabled();
     }
 
     /**
