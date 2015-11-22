@@ -51,11 +51,9 @@ public class MMirrorTile extends QSTileImpl<BooleanState> {
     @Override
     public void handleClick() {
         if (mState.value) {
-            Log.d(TAG, "disabling mirroring!");
-            mDisplayManager.disableMirroring();
+            mDisplayManager.disableHdmiMirroring();
         } else {
-            Log.d(TAG, "enabling mirroring!");
-            mDisplayManager.enableMirroring();
+            mDisplayManager.enableHdmiMirroring();
         }
         refreshState();
     }
@@ -63,7 +61,7 @@ public class MMirrorTile extends QSTileImpl<BooleanState> {
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final boolean hasHdmiDisplay = mHdmiDisplayId != -1;
-        state.value = mDisplayManager.isMirroringEnabled();
+        state.value = mDisplayManager.isHdmiMirroringEnabled();
         state.label = mContext.getString(R.string.quick_settings_mirroring_mode_label);
         state.icon = ResourceIcon.get(state.value ? mEnabledIcon : mDisabledIcon);
     }
@@ -100,11 +98,11 @@ public class MMirrorTile extends QSTileImpl<BooleanState> {
         }
 
         if (listening) {
-            Log.d(TAG, "registering mDisplayListener");
+            // Log.d(TAG, "registering mDisplayListener");
             mDisplayListener.sync();
             mDisplayManager.registerDisplayListener(mDisplayListener, null);
         } else {
-            Log.d(TAG, "unregistering mDisplayListener");
+            // Log.d(TAG, "unregistering mDisplayListener");
             mDisplayManager.unregisterDisplayListener(mDisplayListener);
         }
         mListening = listening;
@@ -114,7 +112,7 @@ public class MMirrorTile extends QSTileImpl<BooleanState> {
         @Override
         public void onDisplayAdded(int displayId) {
             Display display = mDisplayManager.getDisplay(displayId);
-            Log.d(TAG, "Display added: " + display);
+            // Log.d(TAG, "Display added: " + display);
             final boolean hdmiDisplayAdded = display.getType() == Display.TYPE_HDMI;
 
             if (hdmiDisplayAdded) {
