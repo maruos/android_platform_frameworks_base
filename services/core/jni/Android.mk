@@ -70,7 +70,7 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_mperspective_PerspectiveService.cpp
 
 LOCAL_C_INCLUDES += \
-    device/lge/hammerhead/maru/include
+    vendor/maru/include
 
 LOCAL_SHARED_LIBRARIES += \
     libperspective
