@@ -35,12 +35,21 @@ using android::Sensor;
 using android::SensorManager;
 using android::SensorEventQueue;
 using android::String8;
+using android::String16;
 
 /*****************************************************************************/
-
 ASensorManager* ASensorManager_getInstance()
 {
-    return &SensorManager::getInstance();
+    return ASensorManager_getInstanceForPackage(NULL);
+}
+
+ASensorManager* ASensorManager_getInstanceForPackage(const char* packageName)
+{
+    if (packageName) {
+        return &SensorManager::getInstanceForPackage(String16(packageName));
+    } else {
+        return &SensorManager::getInstanceForPackage(String16());
+    }
 }
 
 int ASensorManager_getSensorList(ASensorManager* manager,

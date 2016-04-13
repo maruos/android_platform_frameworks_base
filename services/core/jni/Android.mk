@@ -2,11 +2,18 @@
 # files
 LOCAL_REL_DIR := core/jni
 
-LOCAL_CFLAGS += -Wno-unused-parameter
+LOCAL_CFLAGS += -Wall -Werror -Wno-unused-parameter
+
+ifneq ($(ENABLE_CPUSETS),)
+ifneq ($(ENABLE_SCHED_BOOST),)
+LOCAL_CFLAGS += -DUSE_SCHED_BOOST
+endif
+endif
 
 LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_AlarmManagerService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_am_BatteryStatsService.cpp \
+    $(LOCAL_REL_DIR)/com_android_server_am_ActivityManagerService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_AssetAtlasService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_connectivity_Vpn.cpp \
     $(LOCAL_REL_DIR)/com_android_server_ConsumerIrService.cpp \
@@ -22,23 +29,24 @@ LOCAL_SRC_FILES += \
     $(LOCAL_REL_DIR)/com_android_server_SystemServer.cpp \
     $(LOCAL_REL_DIR)/com_android_server_tv_TvInputHal.cpp \
     $(LOCAL_REL_DIR)/com_android_server_UsbDeviceManager.cpp \
+    $(LOCAL_REL_DIR)/com_android_server_UsbMidiDevice.cpp \
     $(LOCAL_REL_DIR)/com_android_server_UsbHostManager.cpp \
     $(LOCAL_REL_DIR)/com_android_server_VibratorService.cpp \
     $(LOCAL_REL_DIR)/com_android_server_PersistentDataBlockService.cpp \
     $(LOCAL_REL_DIR)/onload.cpp
 
-include external/stlport/libstlport.mk
-
 LOCAL_C_INCLUDES += \
     $(JNI_H_INCLUDE) \
     frameworks/base/services \
     frameworks/base/libs \
+    frameworks/base/libs/hwui \
     frameworks/base/core/jni \
     frameworks/native/services \
     libcore/include \
     libcore/include/libsuspend \
-	$(call include-path-for, libhardware)/hardware \
-	$(call include-path-for, libhardware_legacy)/hardware_legacy \
+    system/security/keystore/include \
+    $(call include-path-for, libhardware)/hardware \
+    $(call include-path-for, libhardware_legacy)/hardware_legacy \
 
 LOCAL_SHARED_LIBRARIES += \
     libandroid_runtime \
@@ -48,6 +56,7 @@ LOCAL_SHARED_LIBRARIES += \
     liblog \
     libhardware \
     libhardware_legacy \
+    libkeystore_binder \
     libnativehelper \
     libutils \
     libui \

@@ -15,11 +15,11 @@
  */
 package com.android.keyguard;
 
-import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.os.SystemClock;
+import android.hardware.fingerprint.FingerprintManager;
 import android.telephony.TelephonyManager;
 import android.view.WindowManagerPolicy;
 
@@ -123,11 +123,6 @@ public class KeyguardUpdateMonitorCallback {
     public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) { }
 
     /**
-     * Called when a user is removed.
-     */
-    public void onUserRemoved(int userId) { }
-
-    /**
      * Called when the user's info changed.
      */
     public void onUserInfoChanged(int userId) { }
@@ -153,17 +148,33 @@ public class KeyguardUpdateMonitorCallback {
     }
 
     /**
-     * Called when the screen turns on
+     * Called when the device has started waking up.
      */
-    public void onScreenTurnedOn() { }
+    public void onStartedWakingUp() { }
 
     /**
-     * Called when the screen turns off
+     * Called when the device has started going to sleep.
+     * @param why see {@link #onFinishedGoingToSleep(int)}
+     */
+    public void onStartedGoingToSleep(int why) { }
+
+    /**
+     * Called when the device has finished going to sleep.
      * @param why either {@link WindowManagerPolicy#OFF_BECAUSE_OF_ADMIN},
      * {@link WindowManagerPolicy#OFF_BECAUSE_OF_USER}, or
      * {@link WindowManagerPolicy#OFF_BECAUSE_OF_TIMEOUT}.
      */
-    public void onScreenTurnedOff(int why) { }
+    public void onFinishedGoingToSleep(int why) { }
+
+    /**
+     * Called when the screen has been turned on.
+     */
+    public void onScreenTurnedOn() { }
+
+    /**
+     * Called when the screen has been turned off.
+     */
+    public void onScreenTurnedOff() { }
 
     /**
      * Called when trust changes for a user.
@@ -176,23 +187,57 @@ public class KeyguardUpdateMonitorCallback {
     public void onTrustManagedChanged(int userId) { }
 
     /**
-     * Called when the user has proved to a trust agent that they want to use the device.
+     * Called after trust was granted with non-zero flags.
      */
-    public void onTrustInitiatedByUser(int userId) { }
+    public void onTrustGrantedWithFlags(int flags, int userId) { }
+
+    /**
+     * Called when a finger has been acquired.
+     * <p>
+     * It is guaranteed that either {@link #onFingerprintAuthenticated} or
+     * {@link #onFingerprintAuthFailed()} is called after this method eventually.
+     */
+    public void onFingerprintAcquired() { }
+
+    /**
+     * Called when a fingerprint couldn't be authenticated.
+     */
+    public void onFingerprintAuthFailed() { }
 
     /**
      * Called when a fingerprint is recognized.
-     * @param userId
+     * @param userId the user id for which the fingerprint was authenticated
      */
-    public void onFingerprintRecognized(int userId) { }
+    public void onFingerprintAuthenticated(int userId) { }
 
     /**
-     * Called when fingerprint is acquired but not yet recognized
+     * Called when fingerprint provides help string (e.g. "Try again")
+     * @param msgId
+     * @param helpString
      */
-    public void onFingerprintAcquired(int info) { }
+    public void onFingerprintHelp(int msgId, String helpString) { }
+
+    /**
+     * Called when fingerprint provides an semi-permanent error message
+     * (e.g. "Hardware not available").
+     * @param msgId one of the error messages listed in {@link FingerprintManager}
+     * @param errString
+     */
+    public void onFingerprintError(int msgId, String errString) { }
 
     /**
      * Called when the state of face unlock changed.
      */
     public void onFaceUnlockStateChanged(boolean running, int userId) { }
+
+    /**
+     * Called when the fingerprint running state changed.
+     */
+    public void onFingerprintRunningStateChanged(boolean running) { }
+
+    /**
+     * Called when the state that the user hasn't used strong authentication since quite some time
+     * has changed.
+     */
+    public void onStrongAuthStateChanged(int userId) { }
 }

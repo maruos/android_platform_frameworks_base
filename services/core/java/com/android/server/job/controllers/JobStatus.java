@@ -54,6 +54,7 @@ public class JobStatus {
     final AtomicBoolean idleConstraintSatisfied = new AtomicBoolean();
     final AtomicBoolean unmeteredConstraintSatisfied = new AtomicBoolean();
     final AtomicBoolean connectivityConstraintSatisfied = new AtomicBoolean();
+    final AtomicBoolean appNotIdleConstraintSatisfied = new AtomicBoolean();
 
     /**
      * Earliest point in the future at which this job will be eligible to run. A value of 0
@@ -79,6 +80,13 @@ public class JobStatus {
         this.name = job.getService().flattenToShortString();
         this.tag = "*job*/" + this.name;
         this.numFailures = numFailures;
+    }
+
+    /** Copy constructor. */
+    public JobStatus(JobStatus jobStatus) {
+        this(jobStatus.getJob(), jobStatus.getUid(), jobStatus.getNumFailures());
+        this.earliestRunTimeElapsedMillis = jobStatus.getEarliestRunTime();
+        this.latestRunTimeElapsedMillis = jobStatus.getLatestRunTimeElapsed();
     }
 
     /** Create a newly scheduled job. */
@@ -199,8 +207,11 @@ public class JobStatus {
      * the constraints are satisfied <strong>or</strong> the deadline on the job has expired.
      */
     public synchronized boolean isReady() {
-        return isConstraintsSatisfied()
-                || (hasDeadlineConstraint() && deadlineConstraintSatisfied.get());
+        // Deadline constraint trumps other constraints
+        // AppNotIdle implicit constraint trumps all!
+        return (isConstraintsSatisfied()
+                    || (hasDeadlineConstraint() && deadlineConstraintSatisfied.get()))
+                && appNotIdleConstraintSatisfied.get();
     }
 
     /**
@@ -229,6 +240,7 @@ public class JobStatus {
                 + ",N=" + job.getNetworkType() + ",C=" + job.isRequireCharging()
                 + ",I=" + job.isRequireDeviceIdle() + ",F=" + numFailures
                 + ",P=" + job.isPersisted()
+                + ",ANI=" + appNotIdleConstraintSatisfied.get()
                 + (isReady() ? "(READY)" : "")
                 + "]";
     }

@@ -44,7 +44,7 @@ public class NotificationBackgroundView extends View {
     }
 
     private void draw(Canvas canvas, Drawable drawable) {
-        if (drawable != null) {
+        if (drawable != null && mActualHeight > mClipTopAmount) {
             drawable.setBounds(0, mClipTopAmount, getWidth(), mActualHeight);
             drawable.draw(canvas);
         }
@@ -85,6 +85,9 @@ public class NotificationBackgroundView extends View {
         mBackground = background;
         if (mBackground != null) {
             mBackground.setCallback(this);
+        }
+        if (mBackground instanceof RippleDrawable) {
+            ((RippleDrawable) mBackground).setForceSoftware(true);
         }
         invalidate();
     }

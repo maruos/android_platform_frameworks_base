@@ -29,18 +29,23 @@ import java.io.PrintWriter;
  * are ready to run, or whether they must be stopped.
  */
 public abstract class StateController {
-    protected static final boolean DEBUG = false;
+    protected static final boolean DEBUG = JobSchedulerService.DEBUG;
     protected Context mContext;
     protected StateChangedListener mStateChangedListener;
+    protected boolean mDeviceIdleMode;
 
     public StateController(StateChangedListener stateChangedListener, Context context) {
         mStateChangedListener = stateChangedListener;
         mContext = context;
     }
 
+    public void deviceIdleModeChanged(boolean enabled) {
+        mDeviceIdleMode = enabled;
+    }
+
     /**
      * Implement the logic here to decide whether a job should be tracked by this controller.
-     * This logic is put here so the JobManger can be completely agnostic of Controller logic.
+     * This logic is put here so the JobManager can be completely agnostic of Controller logic.
      * Also called when updating a task, so implementing controllers have to be aware of
      * preexisting tasks.
      */
@@ -51,5 +56,4 @@ public abstract class StateController {
     public abstract void maybeStopTrackingJob(JobStatus jobStatus);
 
     public abstract void dumpControllerState(PrintWriter pw);
-
 }

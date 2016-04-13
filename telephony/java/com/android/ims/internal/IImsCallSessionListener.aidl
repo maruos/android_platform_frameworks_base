@@ -21,6 +21,7 @@ import com.android.ims.ImsCallProfile;
 import com.android.ims.ImsReasonInfo;
 import com.android.ims.ImsConferenceState;
 import com.android.ims.internal.IImsCallSession;
+import com.android.ims.ImsSuppServiceNotification;
 
 /**
  * A listener type for receiving notification on IMS call session events.
@@ -115,4 +116,18 @@ interface IImsCallSessionListener {
      * - {@link com.android.internal.telephony.Phone#TTY_MODE_VCO}
      */
     void callSessionTtyModeReceived(in IImsCallSession session, in int mode);
+
+    /**
+     * Notifies of a change to the multiparty state for this {@code ImsCallSession}.
+     *
+     * @param session The call session.
+     * @param isMultiParty {@code true} if the session became multiparty, {@code false} otherwise.
+     */
+    void callSessionMultipartyStateChanged(in IImsCallSession session, in boolean isMultiParty);
+
+    /**
+     * Notifies the supplementary service information for the current session.
+     */
+    void callSessionSuppServiceReceived(in IImsCallSession session,
+         in ImsSuppServiceNotification suppSrvNotification);
 }

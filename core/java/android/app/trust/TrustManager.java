@@ -16,13 +16,19 @@
 
 package android.app.trust;
 
+import android.annotation.IntDef;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.SparseIntArray;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * See {@link com.android.server.trust.TrustManagerService}
@@ -34,7 +40,7 @@ public class TrustManager {
     private static final int MSG_TRUST_MANAGED_CHANGED = 2;
 
     private static final String TAG = "TrustManager";
-    private static final String DATA_INITIATED_BY_USER = "initiatedByUser";
+    private static final String DATA_FLAGS = "initiatedByUser";
 
     private final ITrustManager mService;
     private final ArrayMap<TrustListener, ITrustListener> mTrustListeners;
@@ -73,21 +79,6 @@ public class TrustManager {
     }
 
     /**
-     * Reports that trust is disabled until credentials have been entered for user {@param userId}.
-     *
-     * Requires the {@link android.Manifest.permission#ACCESS_KEYGUARD_SECURE_STORAGE} permission.
-     *
-     * @param userId either an explicit user id or {@link android.os.UserHandle#USER_ALL}
-     */
-    public void reportRequireCredentialEntry(int userId) {
-        try {
-            mService.reportRequireCredentialEntry(userId);
-        } catch (RemoteException e) {
-            onError(e);
-        }
-    }
-
-    /**
      * Reports that the visibility of the keyguard has changed.
      *
      * Requires the {@link android.Manifest.permission#ACCESS_KEYGUARD_SECURE_STORAGE} permission.
@@ -109,11 +100,11 @@ public class TrustManager {
         try {
             ITrustListener.Stub iTrustListener = new ITrustListener.Stub() {
                 @Override
-                public void onTrustChanged(boolean enabled, int userId, boolean initiatedByUser) {
+                public void onTrustChanged(boolean enabled, int userId, int flags) {
                     Message m = mHandler.obtainMessage(MSG_TRUST_CHANGED, (enabled ? 1 : 0), userId,
                             trustListener);
-                    if (initiatedByUser) {
-                        m.getData().putBoolean(DATA_INITIATED_BY_USER, initiatedByUser);
+                    if (flags != 0) {
+                        m.getData().putInt(DATA_FLAGS, flags);
                     }
                     m.sendToTarget();
                 }
@@ -156,11 +147,8 @@ public class TrustManager {
         public void handleMessage(Message msg) {
             switch(msg.what) {
                 case MSG_TRUST_CHANGED:
-                    boolean initiatedByUser = msg.peekData() != null &&
-                            msg.peekData().getBoolean(DATA_INITIATED_BY_USER);
-                    ((TrustListener)msg.obj).onTrustChanged(
-                            msg.arg1 != 0, msg.arg2, initiatedByUser);
-
+                    int flags = msg.peekData() != null ? msg.peekData().getInt(DATA_FLAGS) : 0;
+                    ((TrustListener)msg.obj).onTrustChanged(msg.arg1 != 0, msg.arg2, flags);
                     break;
                 case MSG_TRUST_MANAGED_CHANGED:
                     ((TrustListener)msg.obj).onTrustManagedChanged(msg.arg1 != 0, msg.arg2);
@@ -174,10 +162,11 @@ public class TrustManager {
          * Reports that the trust state has changed.
          * @param enabled if true, the system believes the environment to be trusted.
          * @param userId the user, for which the trust changed.
-         * @param initiatedByUser indicates that the user has explicitly initiated an action that
-         *                        proves the user is about to use the device.
+         * @param flags flags specified by the trust agent when granting trust. See
+         *     {@link android.service.trust.TrustAgentService#grantTrust(CharSequence, long, int)
+         *                 TrustAgentService.grantTrust(CharSequence, long, int)}.
          */
-        void onTrustChanged(boolean enabled, int userId, boolean initiatedByUser);
+        void onTrustChanged(boolean enabled, int userId, int flags);
 
         /**
          * Reports that whether trust is managed has changed

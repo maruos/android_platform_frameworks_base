@@ -14,10 +14,8 @@
  * limitations under the License.
  */
 
-#include <sys/sysinfo.h>
-#if defined(HAVE_PTHREADS)
 #include <sys/resource.h>
-#endif
+#include <sys/sysinfo.h>
 
 #include "TaskManager.h"
 #include "Task.h"
@@ -35,7 +33,9 @@ TaskManager::TaskManager() {
     // Get the number of available CPUs. This value does not change over time.
     int cpuCount = sysconf(_SC_NPROCESSORS_CONF);
 
-    int workerCount = MathUtils::max(1, cpuCount / 2);
+    // Really no point in making more than 2 of these worker threads, but
+    // we do want to limit ourselves to 1 worker thread on dual-core devices.
+    int workerCount = cpuCount > 2 ? 2 : 1;
     for (int i = 0; i < workerCount; i++) {
         String8 name;
         name.appendFormat("hwuiTask%d", i + 1);
@@ -83,9 +83,7 @@ bool TaskManager::addTaskBase(const sp<TaskBase>& task, const sp<TaskProcessorBa
 ///////////////////////////////////////////////////////////////////////////////
 
 status_t TaskManager::WorkerThread::readyToRun() {
-#if defined(HAVE_PTHREADS)
     setpriority(PRIO_PROCESS, 0, PRIORITY_FOREGROUND);
-#endif
     return NO_ERROR;
 }
 
@@ -109,10 +107,15 @@ bool TaskManager::WorkerThread::threadLoop() {
 bool TaskManager::WorkerThread::addTask(TaskWrapper task) {
     if (!isRunning()) {
         run(mName.string(), PRIORITY_DEFAULT);
+    } else if (exitPending()) {
+        return false;
     }
 
-    Mutex::Autolock l(mLock);
-    ssize_t index = mTasks.add(task);
+    ssize_t index;
+    {
+        Mutex::Autolock l(mLock);
+        index = mTasks.add(task);
+    }
     mSignal.signal();
 
     return index >= 0;
@@ -124,10 +127,6 @@ size_t TaskManager::WorkerThread::getTaskCount() const {
 }
 
 void TaskManager::WorkerThread::exit() {
-    {
-        Mutex::Autolock l(mLock);
-        mTasks.clear();
-    }
     requestExit();
     mSignal.signal();
 }

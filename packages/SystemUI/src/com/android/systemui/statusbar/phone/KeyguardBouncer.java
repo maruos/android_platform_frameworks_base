@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.phone;
 
 import android.content.Context;
-import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -25,10 +24,13 @@ import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.android.internal.widget.LockPatternUtils;
-import com.android.keyguard.KeyguardViewBase;
+import com.android.keyguard.KeyguardHostView;
+import com.android.keyguard.KeyguardSecurityView;
+import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.R;
 import com.android.keyguard.ViewMediatorCallback;
-import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.DejankUtils;
 
 import static com.android.keyguard.KeyguardHostView.OnDismissAction;
 import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
@@ -43,10 +45,17 @@ public class KeyguardBouncer {
     private LockPatternUtils mLockPatternUtils;
     private ViewGroup mContainer;
     private StatusBarWindowManager mWindowManager;
-    private KeyguardViewBase mKeyguardView;
+    private KeyguardHostView mKeyguardView;
     private ViewGroup mRoot;
     private boolean mShowingSoon;
-    private Choreographer mChoreographer = Choreographer.getInstance();
+    private int mBouncerPromptReason;
+    private KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
+            new KeyguardUpdateMonitorCallback() {
+                @Override
+                public void onStrongAuthStateChanged(int userId) {
+                    mBouncerPromptReason = mCallback.getBouncerPromptReason();
+                }
+            };
 
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, StatusBarWindowManager windowManager,
@@ -56,6 +65,7 @@ public class KeyguardBouncer {
         mLockPatternUtils = lockPatternUtils;
         mContainer = container;
         mWindowManager = windowManager;
+        KeyguardUpdateMonitor.getInstance(mContext).registerCallback(mUpdateMonitorCallback);
     }
 
     public void show(boolean resetSecuritySelection) {
@@ -75,8 +85,7 @@ public class KeyguardBouncer {
             mShowingSoon = true;
 
             // Split up the work over multiple frames.
-            mChoreographer.postCallbackDelayed(Choreographer.CALLBACK_ANIMATION, mShowRunnable,
-                    null, 16);
+            DejankUtils.postAfterTraversal(mShowRunnable);
         }
     }
 
@@ -85,27 +94,43 @@ public class KeyguardBouncer {
         public void run() {
             mRoot.setVisibility(View.VISIBLE);
             mKeyguardView.onResume();
+            showPromptReason(mBouncerPromptReason);
             mKeyguardView.startAppearAnimation();
             mShowingSoon = false;
             mKeyguardView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
         }
     };
 
+    /**
+     * Show a string explaining why the security view needs to be solved.
+     *
+     * @param reason a flag indicating which string should be shown, see
+     *               {@link KeyguardSecurityView#PROMPT_REASON_NONE}
+     *               and {@link KeyguardSecurityView#PROMPT_REASON_RESTART}
+     */
+    public void showPromptReason(int reason) {
+        mKeyguardView.showPromptReason(reason);
+    }
+
+    public void showMessage(String message, int color) {
+        mKeyguardView.showMessage(message, color);
+    }
+
     private void cancelShowRunnable() {
-        mChoreographer.removeCallbacks(Choreographer.CALLBACK_ANIMATION, mShowRunnable, null);
+        DejankUtils.removeCallbacks(mShowRunnable);
         mShowingSoon = false;
     }
 
-    public void showWithDismissAction(OnDismissAction r) {
+    public void showWithDismissAction(OnDismissAction r, Runnable cancelAction) {
         ensureView();
-        mKeyguardView.setOnDismissAction(r);
+        mKeyguardView.setOnDismissAction(r, cancelAction);
         show(false /* resetSecuritySelection */);
     }
 
     public void hide(boolean destroyView) {
         cancelShowRunnable();
          if (mKeyguardView != null) {
-            mKeyguardView.setOnDismissAction(null);
+            mKeyguardView.cancelDismissAction();
             mKeyguardView.cleanUp();
         }
         if (destroyView) {
@@ -140,16 +165,6 @@ public class KeyguardBouncer {
         }
     }
 
-    public long getUserActivityTimeout() {
-        if (mKeyguardView != null) {
-            long timeout = mKeyguardView.getUserActivityTimeout();
-            if (timeout >= 0) {
-                return timeout;
-            }
-        }
-        return KeyguardViewMediator.AWAKE_INTERVAL_DEFAULT_MS;
-    }
-
     public boolean isShowing() {
         return mShowingSoon || (mRoot != null && mRoot.getVisibility() == View.VISIBLE);
     }
@@ -160,6 +175,7 @@ public class KeyguardBouncer {
         if (wasInitialized) {
             mKeyguardView.showPrimarySecurityScreen();
         }
+        mBouncerPromptReason = mCallback.getBouncerPromptReason();
     }
 
     private void ensureView() {
@@ -171,7 +187,7 @@ public class KeyguardBouncer {
     private void inflateView() {
         removeView();
         mRoot = (ViewGroup) LayoutInflater.from(mContext).inflate(R.layout.keyguard_bouncer, null);
-        mKeyguardView = (KeyguardViewBase) mRoot.findViewById(R.id.keyguard_host_view);
+        mKeyguardView = (KeyguardHostView) mRoot.findViewById(R.id.keyguard_host_view);
         mKeyguardView.setLockPatternUtils(mLockPatternUtils);
         mKeyguardView.setViewMediatorCallback(mCallback);
         mContainer.addView(mRoot, mContainer.getChildCount());
@@ -195,6 +211,7 @@ public class KeyguardBouncer {
      * notifications on Keyguard, like SIM PIN/PUK.
      */
     public boolean needsFullscreenBouncer() {
+        ensureView();
         if (mKeyguardView != null) {
             SecurityMode mode = mKeyguardView.getSecurityMode();
             return mode == SecurityMode.SimPin || mode == SecurityMode.SimPuk;
@@ -238,5 +255,10 @@ public class KeyguardBouncer {
     public boolean interceptMediaKey(KeyEvent event) {
         ensureView();
         return mKeyguardView.interceptMediaKey(event);
+    }
+
+    public void notifyKeyguardAuthenticated(boolean strongAuth) {
+        ensureView();
+        mKeyguardView.finish(strongAuth);
     }
 }

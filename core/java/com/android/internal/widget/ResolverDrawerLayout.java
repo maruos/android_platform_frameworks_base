@@ -34,6 +34,7 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.animation.AnimationUtils;
 import android.widget.AbsListView;
 import android.widget.OverScroller;
@@ -67,6 +68,12 @@ public class ResolverDrawerLayout extends ViewGroup {
 
     private int mCollapsibleHeight;
     private int mUncollapsibleHeight;
+
+    /**
+     * The height in pixels of reserved space added to the top of the collapsed UI;
+     * e.g. chooser targets
+     */
+    private int mCollapsibleHeightReserved;
 
     private int mTopOffset;
 
@@ -127,6 +134,8 @@ public class ResolverDrawerLayout extends ViewGroup {
         final ViewConfiguration vc = ViewConfiguration.get(context);
         mTouchSlop = vc.getScaledTouchSlop();
         mMinFlingVelocity = vc.getScaledMinimumFlingVelocity();
+
+        setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
     public void setSmallCollapsed(boolean smallCollapsed) {
@@ -142,12 +151,70 @@ public class ResolverDrawerLayout extends ViewGroup {
         return mCollapseOffset > 0;
     }
 
+    public void setCollapsed(boolean collapsed) {
+        if (!isLaidOut()) {
+            mOpenOnLayout = collapsed;
+        } else {
+            smoothScrollTo(collapsed ? mCollapsibleHeight : 0, 0);
+        }
+    }
+
+    public void setCollapsibleHeightReserved(int heightPixels) {
+        final int oldReserved = mCollapsibleHeightReserved;
+        mCollapsibleHeightReserved = heightPixels;
+
+        final int dReserved = mCollapsibleHeightReserved - oldReserved;
+        if (dReserved != 0 && mIsDragging) {
+            mLastTouchY -= dReserved;
+        }
+
+        final int oldCollapsibleHeight = mCollapsibleHeight;
+        mCollapsibleHeight = Math.max(mCollapsibleHeight, getMaxCollapsedHeight());
+
+        if (updateCollapseOffset(oldCollapsibleHeight, !isDragging())) {
+            return;
+        }
+
+        invalidate();
+    }
+
     private boolean isMoving() {
         return mIsDragging || !mScroller.isFinished();
     }
 
+    private boolean isDragging() {
+        return mIsDragging || getNestedScrollAxes() == SCROLL_AXIS_VERTICAL;
+    }
+
+    private boolean updateCollapseOffset(int oldCollapsibleHeight, boolean remainClosed) {
+        if (oldCollapsibleHeight == mCollapsibleHeight) {
+            return false;
+        }
+
+        if (isLaidOut()) {
+            final boolean isCollapsedOld = mCollapseOffset != 0;
+            if (remainClosed && (oldCollapsibleHeight < mCollapsibleHeight
+                    && mCollapseOffset == oldCollapsibleHeight)) {
+                // Stay closed even at the new height.
+                mCollapseOffset = mCollapsibleHeight;
+            } else {
+                mCollapseOffset = Math.min(mCollapseOffset, mCollapsibleHeight);
+            }
+            final boolean isCollapsedNew = mCollapseOffset != 0;
+            if (isCollapsedOld != isCollapsedNew) {
+                notifyViewAccessibilityStateChangedIfNeeded(
+                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+            }
+        } else {
+            // Start out collapsed at first unless we restored state for otherwise
+            mCollapseOffset = mOpenOnLayout ? 0 : mCollapsibleHeight;
+        }
+        return true;
+    }
+
     private int getMaxCollapsedHeight() {
-        return isSmallCollapsed() ? mMaxCollapsedHeightSmall : mMaxCollapsedHeight;
+        return (isSmallCollapsed() ? mMaxCollapsedHeightSmall : mMaxCollapsedHeight)
+                + mCollapsibleHeightReserved;
     }
 
     public void setOnDismissedListener(OnDismissedListener listener) {
@@ -221,7 +288,7 @@ public class ResolverDrawerLayout extends ViewGroup {
                 mInitialTouchY = mLastTouchY = y;
                 mActivePointerId = ev.getPointerId(0);
                 final boolean hitView = findChildUnder(mInitialTouchX, mInitialTouchY) != null;
-                handled = (!hitView && mOnDismissedListener != null) || mCollapsibleHeight > 0;
+                handled = mOnDismissedListener != null || mCollapsibleHeight > 0;
                 mIsDragging = hitView && handled;
                 abortAnimation();
             }
@@ -573,7 +640,13 @@ public class ResolverDrawerLayout extends ViewGroup {
     @Override
     public boolean onNestedFling(View target, float velocityX, float velocityY, boolean consumed) {
         if (!consumed && Math.abs(velocityY) > mMinFlingVelocity) {
-            smoothScrollTo(velocityY > 0 ? 0 : mCollapsibleHeight, velocityY);
+            if (mOnDismissedListener != null
+                    && velocityY < 0 && mCollapseOffset > mCollapsibleHeight) {
+                smoothScrollTo(mCollapsibleHeight + mUncollapsibleHeight, velocityY);
+                mDismissOnScrollerFinished = true;
+            } else {
+                smoothScrollTo(velocityY > 0 ? 0 : mCollapsibleHeight, velocityY);
+            }
             return true;
         }
         return false;
@@ -593,26 +666,37 @@ public class ResolverDrawerLayout extends ViewGroup {
     }
 
     @Override
-    public void onInitializeAccessibilityEvent(AccessibilityEvent event) {
-        super.onInitializeAccessibilityEvent(event);
-        event.setClassName(ResolverDrawerLayout.class.getName());
+    public CharSequence getAccessibilityClassName() {
+        // Since we support scrolling, make this ViewGroup look like a
+        // ScrollView. This is kind of a hack until we have support for
+        // specifying auto-scroll behavior.
+        return android.widget.ScrollView.class.getName();
     }
 
     @Override
-    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-        super.onInitializeAccessibilityNodeInfo(info);
-        info.setClassName(ResolverDrawerLayout.class.getName());
+    public void onInitializeAccessibilityNodeInfoInternal(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfoInternal(info);
+
         if (isEnabled()) {
             if (mCollapseOffset != 0) {
                 info.addAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
                 info.setScrollable(true);
             }
         }
+
+        // This view should never get accessibility focus, but it's interactive
+        // via nested scrolling, so we can't hide it completely.
+        info.removeAction(AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS);
     }
 
     @Override
-    public boolean performAccessibilityAction(int action, Bundle arguments) {
-        if (super.performAccessibilityAction(action, arguments)) {
+    public boolean performAccessibilityActionInternal(int action, Bundle arguments) {
+        if (action == AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS.getId()) {
+            // This view should never get accessibility focus.
+            return false;
+        }
+
+        if (super.performAccessibilityActionInternal(action, arguments)) {
             return true;
         }
 
@@ -620,6 +704,7 @@ public class ResolverDrawerLayout extends ViewGroup {
             smoothScrollTo(0, 0);
             return true;
         }
+
         return false;
     }
 
@@ -647,7 +732,7 @@ public class ResolverDrawerLayout extends ViewGroup {
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             if (lp.alwaysShow && child.getVisibility() != GONE) {
                 measureChildWithMargins(child, widthSpec, widthPadding, heightSpec, heightUsed);
-                heightUsed += lp.topMargin + child.getMeasuredHeight() + lp.bottomMargin;
+                heightUsed += getHeightUsed(child);
             }
         }
 
@@ -659,30 +744,50 @@ public class ResolverDrawerLayout extends ViewGroup {
             final LayoutParams lp = (LayoutParams) child.getLayoutParams();
             if (!lp.alwaysShow && child.getVisibility() != GONE) {
                 measureChildWithMargins(child, widthSpec, widthPadding, heightSpec, heightUsed);
-                heightUsed += lp.topMargin + child.getMeasuredHeight() + lp.bottomMargin;
+                heightUsed += getHeightUsed(child);
             }
         }
 
+        final int oldCollapsibleHeight = mCollapsibleHeight;
         mCollapsibleHeight = Math.max(0,
                 heightUsed - alwaysShowHeight - getMaxCollapsedHeight());
         mUncollapsibleHeight = heightUsed - mCollapsibleHeight;
 
-        if (isLaidOut()) {
-            final boolean isCollapsedOld = mCollapseOffset != 0;
-            mCollapseOffset = Math.min(mCollapseOffset, mCollapsibleHeight);
-            final boolean isCollapsedNew = mCollapseOffset != 0;
-            if (isCollapsedOld != isCollapsedNew) {
-                notifyViewAccessibilityStateChangedIfNeeded(
-                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
-            }
-        } else {
-            // Start out collapsed at first unless we restored state for otherwise
-            mCollapseOffset = mOpenOnLayout ? 0 : mCollapsibleHeight;
-        }
+        updateCollapseOffset(oldCollapsibleHeight, !isDragging());
 
         mTopOffset = Math.max(0, heightSize - heightUsed) + (int) mCollapseOffset;
 
         setMeasuredDimension(sourceWidth, heightSize);
+    }
+
+    private int getHeightUsed(View child) {
+        // This method exists because we're taking a fast path at measuring ListViews that
+        // lets us get away with not doing the more expensive wrap_content measurement which
+        // imposes double child view measurement costs. If we're looking at a ListView, we can
+        // check against the lowest child view plus padding and margin instead of the actual
+        // measured height of the ListView. This lets the ListView hang off the edge when
+        // all of the content would fit on-screen.
+
+        int heightUsed = child.getMeasuredHeight();
+        if (child instanceof AbsListView) {
+            final AbsListView lv = (AbsListView) child;
+            final int lvPaddingBottom = lv.getPaddingBottom();
+
+            int lowest = 0;
+            for (int i = 0, N = lv.getChildCount(); i < N; i++) {
+                final int bottom = lv.getChildAt(i).getBottom() + lvPaddingBottom;
+                if (bottom > lowest) {
+                    lowest = bottom;
+                }
+            }
+
+            if (lowest < heightUsed) {
+                heightUsed = lowest;
+            }
+        }
+
+        final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+        return lp.topMargin + heightUsed + lp.bottomMargin;
     }
 
     @Override

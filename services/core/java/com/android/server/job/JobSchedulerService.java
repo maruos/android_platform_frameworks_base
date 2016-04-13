@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -40,6 +41,7 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -49,6 +51,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.app.IBatteryStats;
+import com.android.server.job.controllers.AppIdleController;
 import com.android.server.job.controllers.BatteryController;
 import com.android.server.job.controllers.ConnectivityController;
 import com.android.server.job.controllers.IdleController;
@@ -70,9 +73,10 @@ import com.android.server.job.controllers.TimeController;
  */
 public class JobSchedulerService extends com.android.server.SystemService
         implements StateChangedListener, JobCompletedListener {
-    static final boolean DEBUG = false;
+    public static final boolean DEBUG = false;
     /** The number of concurrent jobs we run at one time. */
-    private static final int MAX_JOB_CONTEXTS_COUNT = 3;
+    private static final int MAX_JOB_CONTEXTS_COUNT
+            = ActivityManager.isLowRamDeviceStatic() ? 1 : 3;
     static final String TAG = "JobSchedulerService";
     /** Master list of jobs. */
     final JobStore mJobs;
@@ -95,7 +99,7 @@ public class JobSchedulerService extends com.android.server.SystemService
      * Minimum # of connectivity jobs that must be ready in order to force the JMS to schedule
      * things early.
      */
-    static final int MIN_CONNECTIVITY_COUNT = 2;
+    static final int MIN_CONNECTIVITY_COUNT = 1;  // Run connectivity jobs as soon as ready.
     /**
      * Minimum # of jobs (with no particular constraints) for which the JMS will be happy running
      * some work early.
@@ -107,26 +111,32 @@ public class JobSchedulerService extends com.android.server.SystemService
      * Track Services that have currently active or pending jobs. The index is provided by
      * {@link JobStatus#getServiceToken()}
      */
-    final List<JobServiceContext> mActiveServices = new ArrayList<JobServiceContext>();
+    final List<JobServiceContext> mActiveServices = new ArrayList<>();
     /** List of controllers that will notify this service of updates to jobs. */
     List<StateController> mControllers;
     /**
      * Queue of pending jobs. The JobServiceContext class will receive jobs from this list
      * when ready to execute them.
      */
-    final ArrayList<JobStatus> mPendingJobs = new ArrayList<JobStatus>();
+    final ArrayList<JobStatus> mPendingJobs = new ArrayList<>();
 
-    final ArrayList<Integer> mStartedUsers = new ArrayList();
+    final ArrayList<Integer> mStartedUsers = new ArrayList<>();
 
     final JobHandler mHandler;
     final JobSchedulerStub mJobSchedulerStub;
 
     IBatteryStats mBatteryStats;
+    PowerManager mPowerManager;
 
     /**
      * Set to true once we are allowed to run third party apps.
      */
     boolean mReadyToRock;
+
+    /**
+     * True when in device idle mode, so we don't want to schedule any jobs.
+     */
+    boolean mDeviceIdleMode;
 
     /**
      * Cleans up outstanding jobs when a package is removed. Even if it's being replaced later we
@@ -152,6 +162,8 @@ public class JobSchedulerService extends com.android.server.SystemService
                     Slog.d(TAG, "Removing jobs for user: " + userId);
                 }
                 cancelJobsForUser(userId);
+            } else if (PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED.equals(intent.getAction())) {
+                updateIdleMode(mPowerManager != null ? mPowerManager.isDeviceIdleMode() : false);
             }
         }
     };
@@ -197,7 +209,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         return outList;
     }
 
-    private void cancelJobsForUser(int userHandle) {
+    void cancelJobsForUser(int userHandle) {
         List<JobStatus> jobsForUser;
         synchronized (mJobs) {
             jobsForUser = mJobs.getJobsByUser(userHandle);
@@ -255,6 +267,40 @@ public class JobSchedulerService extends com.android.server.SystemService
         }
     }
 
+    void updateIdleMode(boolean enabled) {
+        boolean changed = false;
+        boolean rocking;
+        synchronized (mJobs) {
+            if (mDeviceIdleMode != enabled) {
+                changed = true;
+            }
+            rocking = mReadyToRock;
+        }
+        if (changed) {
+            if (rocking) {
+                for (int i=0; i<mControllers.size(); i++) {
+                    mControllers.get(i).deviceIdleModeChanged(enabled);
+                }
+            }
+            synchronized (mJobs) {
+                mDeviceIdleMode = enabled;
+                if (enabled) {
+                    // When becoming idle, make sure no jobs are actively running.
+                    for (int i=0; i<mActiveServices.size(); i++) {
+                        JobServiceContext jsc = mActiveServices.get(i);
+                        final JobStatus executing = jsc.getRunningJob();
+                        if (executing != null) {
+                            jsc.cancelExecutingJob();
+                        }
+                    }
+                } else {
+                    // When coming out of idle, allow thing to start back up.
+                    mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
+                }
+            }
+        }
+    }
+
     /**
      * Initializes the system service.
      * <p>
@@ -272,6 +318,7 @@ public class JobSchedulerService extends com.android.server.SystemService
         mControllers.add(TimeController.get(this));
         mControllers.add(IdleController.get(this));
         mControllers.add(BatteryController.get(this));
+        mControllers.add(AppIdleController.get(this));
 
         mHandler = new JobHandler(context.getMainLooper());
         mJobSchedulerStub = new JobSchedulerStub();
@@ -292,8 +339,10 @@ public class JobSchedulerService extends com.android.server.SystemService
             getContext().registerReceiverAsUser(
                     mBroadcastReceiver, UserHandle.ALL, filter, null, null);
             final IntentFilter userFilter = new IntentFilter(Intent.ACTION_USER_REMOVED);
+            userFilter.addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED);
             getContext().registerReceiverAsUser(
                     mBroadcastReceiver, UserHandle.ALL, userFilter, null, null);
+            mPowerManager = (PowerManager)getContext().getSystemService(Context.POWER_SERVICE);
         } else if (phase == PHASE_THIRD_PARTY_APPS_CAN_START) {
             synchronized (mJobs) {
                 // Let's go!
@@ -311,6 +360,7 @@ public class JobSchedulerService extends com.android.server.SystemService
                 for (int i=0; i<jobs.size(); i++) {
                     JobStatus job = jobs.valueAt(i);
                     for (int controller=0; controller<mControllers.size(); controller++) {
+                        mControllers.get(controller).deviceIdleModeChanged(mDeviceIdleMode);
                         mControllers.get(controller).maybeStartTrackingJob(job);
                     }
                 }
@@ -393,13 +443,16 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     /**
-     * A job is rescheduled with exponential back-off if the client requests this from their
-     * execution logic.
-     * A caveat is for idle-mode jobs, for which the idle-mode constraint will usurp the
-     * timeliness of the reschedule. For an idle-mode job, no deadline is given.
+     * Reschedules the given job based on the job's backoff policy. It doesn't make sense to
+     * specify an override deadline on a failed job (the failed job will run even though it's not
+     * ready), so we reschedule it with {@link JobStatus#NO_LATEST_RUNTIME}, but specify that any
+     * ready job with {@link JobStatus#numFailures} > 0 will be executed.
+     *
      * @param failureToReschedule Provided job status that we will reschedule.
      * @return A newly instantiated JobStatus with the same constraints as the last job except
      * with adjusted timing constraints.
+     *
+     * @see JobHandler#maybeQueueReadyJobsForExecutionLockedH
      */
     private JobStatus getRescheduleJobForFailure(JobStatus failureToReschedule) {
         final long elapsedNowMillis = SystemClock.elapsedRealtime();
@@ -429,8 +482,9 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     /**
-     * Called after a periodic has executed so we can to re-add it. We take the last execution time
-     * of the job to be the time of completion (i.e. the time at which this function is called).
+     * Called after a periodic has executed so we can reschedule it. We take the last execution
+     * time of the job to be the time of completion (i.e. the time at which this function is
+     * called).
      * This could be inaccurate b/c the job can run for as long as
      * {@link com.android.server.job.JobServiceContext#EXECUTING_TIMESLICE_MILLIS}, but will lead
      * to underscheduling at least, rather than if we had taken the last execution time to be the
@@ -441,7 +495,12 @@ public class JobSchedulerService extends com.android.server.SystemService
     private JobStatus getRescheduleJobForPeriodic(JobStatus periodicToReschedule) {
         final long elapsedNow = SystemClock.elapsedRealtime();
         // Compute how much of the period is remaining.
-        long runEarly = Math.max(periodicToReschedule.getLatestRunTimeElapsed() - elapsedNow, 0);
+        long runEarly = 0L;
+
+        // If this periodic was rescheduled it won't have a deadline.
+        if (periodicToReschedule.hasDeadlineConstraint()) {
+            runEarly = Math.max(periodicToReschedule.getLatestRunTimeElapsed() - elapsedNow, 0L);
+        }
         long newEarliestRunTimeElapsed = elapsedNow + runEarly;
         long period = periodicToReschedule.getJob().getIntervalMillis();
         long newLatestRuntimeElapsed = newEarliestRunTimeElapsed + period;
@@ -640,7 +699,6 @@ public class JobSchedulerService extends com.android.server.SystemService
             final boolean jobPending = mPendingJobs.contains(job);
             final boolean jobActive = isCurrentlyActiveLocked(job);
             final boolean userRunning = mStartedUsers.contains(job.getUserId());
-
             if (DEBUG) {
                 Slog.v(TAG, "isReadyToBeExecutedLocked: " + job.toShortString()
                         + " ready=" + jobReady + " pending=" + jobPending
@@ -665,6 +723,10 @@ public class JobSchedulerService extends com.android.server.SystemService
          */
         private void maybeRunPendingJobsH() {
             synchronized (mJobs) {
+                if (mDeviceIdleMode) {
+                    // If device is idle, we will not schedule jobs to run.
+                    return;
+                }
                 Iterator<JobStatus> it = mPendingJobs.iterator();
                 if (DEBUG) {
                     Slog.d(TAG, "pending queue: " + mPendingJobs.size() + " jobs.");
@@ -686,6 +748,10 @@ public class JobSchedulerService extends com.android.server.SystemService
                         }
                     }
                     if (availableContext != null) {
+                        if (DEBUG) {
+                            Slog.d(TAG, "About to run job "
+                                    + nextPending.getJob().getService().toString());
+                        }
                         if (!availableContext.executeRunnableJob(nextPending)) {
                             if (DEBUG) {
                                 Slog.d(TAG, "Error executing " + nextPending);
@@ -876,6 +942,7 @@ public class JobSchedulerService extends com.android.server.SystemService
             }
             pw.println();
             pw.print("mReadyToRock="); pw.println(mReadyToRock);
+            pw.print("mDeviceIdleMode="); pw.println(mDeviceIdleMode);
         }
         pw.println();
     }
