@@ -1,6 +1,14 @@
 <!--
-    Copyright (C) 2015 Preetam D'Souza
+    Copyright (C) 2015-2016 Preetam J. D'Souza
+    Copyright (C) 2016 The Maru OS Project
 
+    This work is licensed under the Creative Commons Attribution 4.0
+    International License (CC-BY 4.0). To view a copy of the license, visit
+
+    https://creativecommons.org/licenses/by/4.0/
+
+    Derived from Material Design icon "desktop windows"
+    https://design.google.com/icons/#ic_desktop_windows
 -->
 
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
