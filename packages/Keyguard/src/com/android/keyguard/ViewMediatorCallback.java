@@ -28,12 +28,11 @@ public interface ViewMediatorCallback {
 
     /**
      * Report that the keyguard is done.
-     * @param authenticated Whether the user securely got past the keyguard.
-     *   the only reason for this to be false is if the keyguard was instructed
-     *   to appear temporarily to verify the user is supposed to get past the
-     *   keyguard, and the user fails to do so.
+     *
+     * @param strongAuth whether the user has authenticated with strong authentication like
+     *                   pattern, password or PIN but not by trust agents or fingerprint
      */
-    void keyguardDone(boolean authenticated);
+    void keyguardDone(boolean strongAuth);
 
     /**
      * Report that the keyguard is done drawing.
@@ -47,15 +46,12 @@ public interface ViewMediatorCallback {
     void setNeedsInput(boolean needsInput);
 
     /**
-     * Tell view mediator that the keyguard view's desired user activity timeout
-     * has changed and needs to be reapplied to the window.
-     */
-    void onUserActivityTimeoutChanged();
-
-    /**
      * Report that the keyguard is dismissable, pending the next keyguardDone call.
+     *
+     * @param strongAuth whether the user has authenticated with strong authentication like
+     *                   pattern, password or PIN but not by trust agents or fingerprint
      */
-    void keyguardDonePending();
+    void keyguardDonePending(boolean strongAuth);
 
     /**
      * Report when keyguard is actually gone
@@ -68,6 +64,11 @@ public interface ViewMediatorCallback {
     void readyForKeyguardDone();
 
     /**
+     * Reset the keyguard and bouncer.
+     */
+    void resetKeyguard();
+
+    /**
      * Play the "device trusted" sound.
      */
     void playTrustedSound();
@@ -77,4 +78,18 @@ public interface ViewMediatorCallback {
      *         (legacy API)
      */
     boolean isInputRestricted();
+
+    /**
+     * @return true if the screen is on
+     */
+    boolean isScreenOn();
+
+    /**
+     * @return one of the reasons why the bouncer needs to be shown right now and the user can't use
+     *         his normal unlock method like fingerprint or trust agents. See
+     *         {@link KeyguardSecurityView#PROMPT_REASON_NONE},
+     *         {@link KeyguardSecurityView#PROMPT_REASON_RESTART} and
+     *         {@link KeyguardSecurityView#PROMPT_REASON_TIMEOUT}.
+     */
+    int getBouncerPromptReason();
 }

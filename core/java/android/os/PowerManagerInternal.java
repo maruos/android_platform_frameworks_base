@@ -53,6 +53,15 @@ public abstract class PowerManagerInternal {
      */
     public static final int WAKEFULNESS_DOZING = 3;
 
+
+    /**
+     * Power hint: The user is interacting with the device. The corresponding data field must be
+     * the expected duration of the fling, or 0 if unknown.
+     *
+     * This must be kept in sync with the values in hardware/libhardware/include/hardware/power.h
+     */
+    public static final int POWER_HINT_INTERACTION = 2;
+
     public static String wakefulnessToString(int wakefulness) {
         switch (wakefulness) {
             case WAKEFULNESS_ASLEEP:
@@ -117,7 +126,7 @@ public abstract class PowerManagerInternal {
     /**
      * Used by the dream manager to override certain properties while dozing.
      *
-     * @param screenState The overridden screen state, or {@link Display.STATE_UNKNOWN}
+     * @param screenState The overridden screen state, or {@link Display#STATE_UNKNOWN}
      * to disable the override.
      * @param screenBrightness The overridden screen brightness, or
      * {@link PowerManager#BRIGHTNESS_DEFAULT} to disable the override.
@@ -132,4 +141,16 @@ public abstract class PowerManagerInternal {
     public interface LowPowerModeListener {
         public void onLowPowerModeChanged(boolean enabled);
     }
+
+    public abstract void setDeviceIdleMode(boolean enabled);
+
+    public abstract void setDeviceIdleWhitelist(int[] appids);
+
+    public abstract void setDeviceIdleTempWhitelist(int[] appids);
+
+    public abstract void updateUidProcState(int uid, int procState);
+
+    public abstract void uidGone(int uid);
+
+    public abstract void powerHint(int hintId, int data);
 }

@@ -17,15 +17,14 @@
 package com.android.keyguard;
 
 public interface SecurityMessageDisplay {
-    public void setMessage(CharSequence msg, boolean important);
 
-    public void setMessage(int resId, boolean important);
+    void setNextMessageColor(int color);
 
-    public void setMessage(int resId, boolean important, Object... formatArgs);
+    void setMessage(CharSequence msg, boolean important);
 
-    public void setTimeout(int timeout_ms);
+    void setMessage(int resId, boolean important);
 
-    public void showBouncer(int animationDuration);
+    void setMessage(int resId, boolean important, Object... formatArgs);
 
-    public void hideBouncer(int animationDuration);
+    void setTimeout(int timeout_ms);
 }

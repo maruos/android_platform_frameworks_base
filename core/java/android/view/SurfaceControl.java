@@ -453,6 +453,19 @@ public class SurfaceControl {
         }
     }
 
+    /**
+     * Sets the security of the surface.  Setting the flag is equivalent to creating the
+     * Surface with the {@link #SECURE} flag.
+     */
+    public void setSecure(boolean isSecure) {
+        checkNotReleased();
+        if (isSecure) {
+            nativeSetFlags(mNativeObject, SECURE, SECURE);
+        } else {
+            nativeSetFlags(mNativeObject, 0, SECURE);
+        }
+    }
+
     /*
      * set display parameters.
      * needs to be inside open/closeTransaction block
@@ -471,6 +484,7 @@ public class SurfaceControl {
         public boolean secure;
         public long appVsyncOffsetNanos;
         public long presentationDeadlineNanos;
+        public int colorTransform;
 
         public PhysicalDisplayInfo() {
         }
@@ -494,7 +508,8 @@ public class SurfaceControl {
                     && yDpi == other.yDpi
                     && secure == other.secure
                     && appVsyncOffsetNanos == other.appVsyncOffsetNanos
-                    && presentationDeadlineNanos == other.presentationDeadlineNanos;
+                    && presentationDeadlineNanos == other.presentationDeadlineNanos
+                    && colorTransform == other.colorTransform;
         }
 
         @Override
@@ -512,6 +527,7 @@ public class SurfaceControl {
             secure = other.secure;
             appVsyncOffsetNanos = other.appVsyncOffsetNanos;
             presentationDeadlineNanos = other.presentationDeadlineNanos;
+            colorTransform = other.colorTransform;
         }
 
         // For debugging purposes
@@ -520,7 +536,8 @@ public class SurfaceControl {
             return "PhysicalDisplayInfo{" + width + " x " + height + ", " + refreshRate + " fps, "
                     + "density " + density + ", " + xDpi + " x " + yDpi + " dpi, secure " + secure
                     + ", appVsyncOffset " + appVsyncOffsetNanos
-                    + ", bufferDeadline " + presentationDeadlineNanos + "}";
+                    + ", bufferDeadline " + presentationDeadlineNanos
+                    + ", colorTransform " + colorTransform + "}";
         }
     }
 

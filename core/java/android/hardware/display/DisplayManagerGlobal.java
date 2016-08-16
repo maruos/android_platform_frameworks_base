@@ -19,10 +19,10 @@
 package android.hardware.display;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.media.projection.MediaProjection;
 import android.media.projection.IMediaProjection;
-import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -192,17 +192,6 @@ public final class DisplayManagerGlobal {
      */
     public Display getRealDisplay(int displayId) {
         return getCompatibleDisplay(displayId, DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS);
-    }
-
-    /**
-     * Gets information about a logical display without applying any compatibility metrics.
-     *
-     * @param displayId The logical display id.
-     * @param IBinder the activity token for this display.
-     * @return The display object, or null if there is no display with the given id.
-     */
-    public Display getRealDisplay(int displayId, IBinder token) {
-        return getCompatibleDisplay(displayId, new DisplayAdjustments(token));
     }
 
     public void registerDisplayListener(DisplayListener listener, Handler handler) {
@@ -394,6 +383,14 @@ public final class DisplayManagerGlobal {
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to get Wifi display status.", ex);
             return new WifiDisplayStatus();
+        }
+    }
+
+    public void requestColorTransform(int displayId, int colorTransformId) {
+        try {
+            mDm.requestColorTransform(displayId, colorTransformId);
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to request color transform.", ex);
         }
     }
 

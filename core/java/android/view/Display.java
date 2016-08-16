@@ -18,17 +18,24 @@
 
 package android.view;
 
+import android.annotation.RequiresPermission;
+import android.content.Context;
 import android.content.res.CompatibilityInfo;
+import android.content.res.Resources;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManagerGlobal;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
 import java.util.Arrays;
+
+import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_TRANSFORM;
 
 /**
  * Provides information about the size and density of a logical display.
@@ -95,6 +102,11 @@ public final class Display {
      * @hide
      */
     public static final int DEFAULT_EXTERNAL_DISPLAY = 1;
+
+    /**
+     * Invalid display id.
+     */
+    public static final int INVALID_DISPLAY = -1;
 
     /**
      * Display flag: Indicates that the display supports compositing content
@@ -178,6 +190,26 @@ public final class Display {
      * @see #getFlags
      */
     public static final int FLAG_PRESENTATION = 1 << 3;
+
+    /**
+     * Display flag: Indicates that the display has a round shape.
+     * <p>
+     * This flag identifies displays that are circular, elliptical or otherwise
+     * do not permit the user to see all the way to the logical corners of the display.
+     * </p>
+     *
+     * @see #getFlags
+     */
+    public static final int FLAG_ROUND = 1 << 4;
+
+    /**
+     * Display flag: Indicates that the contents of the display should not be scaled
+     * to fit the physical screen dimensions.  Used for development only to emulate
+     * devices with smaller physicals screens while preserving density.
+     *
+     * @hide
+     */
+    public static final int FLAG_SCALING_DISABLED = 1 << 30;
 
     /**
      * Display type: Unknown display type.
@@ -620,18 +652,87 @@ public final class Display {
     public float getRefreshRate() {
         synchronized (this) {
             updateDisplayInfoLocked();
-            return mDisplayInfo.refreshRate;
+            return mDisplayInfo.getMode().getRefreshRate();
         }
     }
 
     /**
      * Get the supported refresh rates of this display in frames per second.
+     * <p>
+     * This method only returns refresh rates for the display's default modes. For more options, use
+     * {@link #getSupportedModes()}.
+     *
+     * @deprecated use {@link #getSupportedModes()} instead
      */
+    @Deprecated
     public float[] getSupportedRefreshRates() {
         synchronized (this) {
             updateDisplayInfoLocked();
-            final float[] refreshRates = mDisplayInfo.supportedRefreshRates;
-            return Arrays.copyOf(refreshRates, refreshRates.length);
+            return mDisplayInfo.getDefaultRefreshRates();
+        }
+    }
+
+    /**
+     * Returns the active mode of the display.
+     */
+    public Mode getMode() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.getMode();
+        }
+    }
+
+    /**
+     * Gets the supported modes of this display.
+     */
+    public Mode[] getSupportedModes() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            final Display.Mode[] modes = mDisplayInfo.supportedModes;
+            return Arrays.copyOf(modes, modes.length);
+        }
+    }
+
+    /**
+     * Request the display applies a color transform.
+     * @hide
+     */
+    @RequiresPermission(CONFIGURE_DISPLAY_COLOR_TRANSFORM)
+    public void requestColorTransform(ColorTransform colorTransform) {
+        mGlobal.requestColorTransform(mDisplayId, colorTransform.getId());
+    }
+
+    /**
+     * Returns the active color transform of this display
+     * @hide
+     */
+    public ColorTransform getColorTransform() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.getColorTransform();
+        }
+    }
+
+    /**
+     * Returns the default color transform of this display
+     * @hide
+     */
+    public ColorTransform getDefaultColorTransform() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.getDefaultColorTransform();
+        }
+    }
+
+    /**
+     * Gets the supported color transforms of this device.
+     * @hide
+     */
+    public ColorTransform[] getSupportedColorTransforms() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            ColorTransform[] transforms = mDisplayInfo.supportedColorTransforms;
+            return Arrays.copyOf(transforms, transforms.length);
         }
     }
 
@@ -726,7 +827,7 @@ public final class Display {
             updateDisplayInfoLocked();
             mDisplayInfo.getLogicalMetrics(outMetrics,
                     CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO,
-                    mDisplayAdjustments.getActivityToken());
+                    mDisplayAdjustments.getConfiguration());
         }
     }
 
@@ -862,5 +963,238 @@ public final class Display {
      */
     public static boolean isSuspendedState(int state) {
         return state == STATE_OFF || state == STATE_DOZE_SUSPEND;
+    }
+
+    /**
+     * A mode supported by a given display.
+     *
+     * @see Display#getSupportedModes()
+     */
+    public static final class Mode implements Parcelable {
+        /**
+         * @hide
+         */
+        public static final Mode[] EMPTY_ARRAY = new Mode[0];
+
+        private final int mModeId;
+        private final int mWidth;
+        private final int mHeight;
+        private final float mRefreshRate;
+
+        /**
+         * @hide
+         */
+        public Mode(int modeId, int width, int height, float refreshRate) {
+            mModeId = modeId;
+            mWidth = width;
+            mHeight = height;
+            mRefreshRate = refreshRate;
+        }
+
+        /**
+         * Returns this mode's id.
+         */
+        public int getModeId() {
+            return mModeId;
+        }
+
+        /**
+         * Returns the physical width of the display in pixels when configured in this mode's
+         * resolution.
+         * <p>
+         * Note that due to application UI scaling, the number of pixels made available to
+         * applications when the mode is active (as reported by {@link Display#getWidth()} may
+         * differ from the mode's actual resolution (as reported by this function).
+         * <p>
+         * For example, applications running on a 4K display may have their UI laid out and rendered
+         * in 1080p and then scaled up. Applications can take advantage of the extra resolution by
+         * rendering content through a {@link android.view.SurfaceView} using full size buffers.
+         */
+        public int getPhysicalWidth() {
+            return mWidth;
+        }
+
+        /**
+         * Returns the physical height of the display in pixels when configured in this mode's
+         * resolution.
+         * <p>
+         * Note that due to application UI scaling, the number of pixels made available to
+         * applications when the mode is active (as reported by {@link Display#getHeight()} may
+         * differ from the mode's actual resolution (as reported by this function).
+         * <p>
+         * For example, applications running on a 4K display may have their UI laid out and rendered
+         * in 1080p and then scaled up. Applications can take advantage of the extra resolution by
+         * rendering content through a {@link android.view.SurfaceView} using full size buffers.
+         */
+        public int getPhysicalHeight() {
+            return mHeight;
+        }
+
+        /**
+         * Returns the refresh rate in frames per second.
+         */
+        public float getRefreshRate() {
+            return mRefreshRate;
+        }
+
+        /**
+         * Returns {@code true} if this mode matches the given parameters.
+         *
+         * @hide
+         */
+        public boolean matches(int width, int height, float refreshRate) {
+            return mWidth == width &&
+                    mHeight == height &&
+                    Float.floatToIntBits(mRefreshRate) == Float.floatToIntBits(refreshRate);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Mode)) {
+                return false;
+            }
+            Mode that = (Mode) other;
+            return mModeId == that.mModeId && matches(that.mWidth, that.mHeight, that.mRefreshRate);
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 1;
+            hash = hash * 17 + mModeId;
+            hash = hash * 17 + mWidth;
+            hash = hash * 17 + mHeight;
+            hash = hash * 17 + Float.floatToIntBits(mRefreshRate);
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return new StringBuilder("{")
+                    .append("id=").append(mModeId)
+                    .append(", width=").append(mWidth)
+                    .append(", height=").append(mHeight)
+                    .append(", fps=").append(mRefreshRate)
+                    .append("}")
+                    .toString();
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        private Mode(Parcel in) {
+            this(in.readInt(), in.readInt(), in.readInt(), in.readFloat());
+        }
+
+        @Override
+        public void writeToParcel(Parcel out, int parcelableFlags) {
+            out.writeInt(mModeId);
+            out.writeInt(mWidth);
+            out.writeInt(mHeight);
+            out.writeFloat(mRefreshRate);
+        }
+
+        @SuppressWarnings("hiding")
+        public static final Parcelable.Creator<Mode> CREATOR
+                = new Parcelable.Creator<Mode>() {
+            @Override
+            public Mode createFromParcel(Parcel in) {
+                return new Mode(in);
+            }
+
+            @Override
+            public Mode[] newArray(int size) {
+                return new Mode[size];
+            }
+        };
+    }
+
+    /**
+     * A color transform supported by a given display.
+     *
+     * @see Display#getSupportedColorTransforms()
+     * @hide
+     */
+    public static final class ColorTransform implements Parcelable {
+        public static final ColorTransform[] EMPTY_ARRAY = new ColorTransform[0];
+
+        private final int mId;
+        private final int mColorTransform;
+
+        public ColorTransform(int id, int colorTransform) {
+            mId = id;
+            mColorTransform = colorTransform;
+        }
+
+        public int getId() {
+            return mId;
+        }
+
+        public int getColorTransform() {
+            return mColorTransform;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof ColorTransform)) {
+                return false;
+            }
+            ColorTransform that = (ColorTransform) other;
+            return mId == that.mId
+                && mColorTransform == that.mColorTransform;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 1;
+            hash = hash * 17 + mId;
+            hash = hash * 17 + mColorTransform;
+            return hash;
+        }
+
+        @Override
+        public String toString() {
+            return new StringBuilder("{")
+                    .append("id=").append(mId)
+                    .append(", colorTransform=").append(mColorTransform)
+                    .append("}")
+                    .toString();
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        private ColorTransform(Parcel in) {
+            this(in.readInt(), in.readInt());
+        }
+
+        @Override
+        public void writeToParcel(Parcel out, int parcelableFlags) {
+            out.writeInt(mId);
+            out.writeInt(mColorTransform);
+        }
+
+        @SuppressWarnings("hiding")
+        public static final Parcelable.Creator<ColorTransform> CREATOR
+                = new Parcelable.Creator<ColorTransform>() {
+            @Override
+            public ColorTransform createFromParcel(Parcel in) {
+                return new ColorTransform(in);
+            }
+
+            @Override
+            public ColorTransform[] newArray(int size) {
+                return new ColorTransform[size];
+            }
+        };
     }
 }

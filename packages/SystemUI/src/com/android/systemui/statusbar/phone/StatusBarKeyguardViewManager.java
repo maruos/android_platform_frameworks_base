@@ -19,18 +19,18 @@ package com.android.systemui.statusbar.phone;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.os.Bundle;
-import android.os.RemoteException;
 import android.os.SystemClock;
-import android.util.Slog;
+import android.os.Trace;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewRootImpl;
 import android.view.WindowManagerGlobal;
 
-import com.android.internal.policy.IKeyguardShowCallback;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.statusbar.CommandQueue;
 
 import static com.android.keyguard.KeyguardHostView.OnDismissAction;
 
@@ -49,6 +49,8 @@ public class StatusBarKeyguardViewManager {
     // with the appear animations of the PIN/pattern/password views.
     private static final long NAV_BAR_SHOW_DELAY_BOUNCER = 320;
 
+    private static final long WAKE_AND_UNLOCK_SCRIM_FADEOUT_DURATION_MS = 200;
+
     private static String TAG = "StatusBarKeyguardViewManager";
 
     private final Context mContext;
@@ -57,11 +59,13 @@ public class StatusBarKeyguardViewManager {
     private ViewMediatorCallback mViewMediatorCallback;
     private PhoneStatusBar mPhoneStatusBar;
     private ScrimController mScrimController;
+    private FingerprintUnlockController mFingerprintUnlockController;
 
     private ViewGroup mContainer;
     private StatusBarWindowManager mStatusBarWindowManager;
 
-    private boolean mScreenOn = false;
+    private boolean mDeviceInteractive = false;
+    private boolean mScreenTurnedOn;
     private KeyguardBouncer mBouncer;
     private boolean mShowing;
     private boolean mOccluded;
@@ -72,6 +76,8 @@ public class StatusBarKeyguardViewManager {
     private boolean mLastBouncerShowing;
     private boolean mLastBouncerDismissible;
     private OnDismissAction mAfterKeyguardGoneAction;
+    private boolean mDeviceWillWakeUp;
+    private boolean mDeferScrimFadeOut;
 
     public StatusBarKeyguardViewManager(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils) {
@@ -82,11 +88,13 @@ public class StatusBarKeyguardViewManager {
 
     public void registerStatusBar(PhoneStatusBar phoneStatusBar,
             ViewGroup container, StatusBarWindowManager statusBarWindowManager,
-            ScrimController scrimController) {
+            ScrimController scrimController,
+            FingerprintUnlockController fingerprintUnlockController) {
         mPhoneStatusBar = phoneStatusBar;
         mContainer = container;
         mStatusBarWindowManager = statusBarWindowManager;
         mScrimController = scrimController;
+        mFingerprintUnlockController = fingerprintUnlockController;
         mBouncer = new KeyguardBouncer(mContext, mViewMediatorCallback, mLockPatternUtils,
                 mStatusBarWindowManager, container);
     }
@@ -98,6 +106,7 @@ public class StatusBarKeyguardViewManager {
     public void show(Bundle options) {
         mShowing = true;
         mStatusBarWindowManager.setKeyguardShowing(true);
+        mScrimController.abortKeyguardFadingOut();
         reset();
     }
 
@@ -125,10 +134,11 @@ public class StatusBarKeyguardViewManager {
         updateStates();
     }
 
-    public void dismissWithAction(OnDismissAction r, boolean afterKeyguardGone) {
+    public void dismissWithAction(OnDismissAction r, Runnable cancelAction,
+            boolean afterKeyguardGone) {
         if (mShowing) {
             if (!afterKeyguardGone) {
-                mBouncer.showWithDismissAction(r);
+                mBouncer.showWithDismissAction(r, cancelAction);
             } else {
                 mBouncer.show(false /* resetSecuritySelection */);
                 mAfterKeyguardGoneAction = r;
@@ -144,39 +154,57 @@ public class StatusBarKeyguardViewManager {
         if (mShowing) {
             if (mOccluded) {
                 mPhoneStatusBar.hideKeyguard();
+                mPhoneStatusBar.stopWaitingForKeyguardExit();
                 mBouncer.hide(false /* destroyView */);
             } else {
                 showBouncerOrKeyguard();
             }
+            KeyguardUpdateMonitor.getInstance(mContext).sendKeyguardReset();
             updateStates();
         }
     }
 
-    public void onScreenTurnedOff() {
-        mScreenOn = false;
-        mPhoneStatusBar.onScreenTurnedOff();
+    public void onStartedGoingToSleep() {
+        mPhoneStatusBar.onStartedGoingToSleep();
+    }
+
+    public void onFinishedGoingToSleep() {
+        mDeviceInteractive = false;
+        mPhoneStatusBar.onFinishedGoingToSleep();
         mBouncer.onScreenTurnedOff();
     }
 
-    public void onScreenTurnedOn(final IKeyguardShowCallback callback) {
-        mScreenOn = true;
-        mPhoneStatusBar.onScreenTurnedOn();
-        if (callback != null) {
-            callbackAfterDraw(callback);
-        }
+    public void onStartedWakingUp() {
+        mDeviceInteractive = true;
+        mDeviceWillWakeUp = false;
+        mPhoneStatusBar.onStartedWakingUp();
     }
 
-    private void callbackAfterDraw(final IKeyguardShowCallback callback) {
-        mContainer.post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    callback.onShown(mContainer.getWindowToken());
-                } catch (RemoteException e) {
-                    Slog.w(TAG, "Exception calling onShown():", e);
-                }
-            }
-        });
+    public void onScreenTurningOn() {
+        mPhoneStatusBar.onScreenTurningOn();
+    }
+
+    public boolean isScreenTurnedOn() {
+        return mScreenTurnedOn;
+    }
+
+    public void onScreenTurnedOn() {
+        mScreenTurnedOn = true;
+        if (mDeferScrimFadeOut) {
+            mDeferScrimFadeOut = false;
+            animateScrimControllerKeyguardFadingOut(0, WAKE_AND_UNLOCK_SCRIM_FADEOUT_DURATION_MS,
+                    true /* skipFirstFrame */);
+            updateStates();
+        }
+        mPhoneStatusBar.onScreenTurnedOn();
+    }
+
+    public void onScreenTurnedOff() {
+        mScreenTurnedOn = false;
+    }
+
+    public void notifyDeviceWakeUpRequested() {
+        mDeviceWillWakeUp = !mDeviceInteractive;
     }
 
     public void verifyUnlock() {
@@ -185,10 +213,6 @@ public class StatusBarKeyguardViewManager {
 
     public void setNeedsInput(boolean needsInput) {
         mStatusBarWindowManager.setKeyguardNeedsInput(needsInput);
-    }
-
-    public void updateUserActivityTimeout() {
-        mStatusBarWindowManager.setKeyguardUserActivityTimeout(mBouncer.getUserActivityTimeout());
     }
 
     public void setOccluded(boolean occluded) {
@@ -249,7 +273,8 @@ public class StatusBarKeyguardViewManager {
                     updateStates();
                     mScrimController.animateKeyguardFadingOut(
                             PhoneStatusBar.FADE_KEYGUARD_START_DELAY,
-                            PhoneStatusBar.FADE_KEYGUARD_DURATION, null);
+                            PhoneStatusBar.FADE_KEYGUARD_DURATION, null,
+                            false /* skipFirstFrame */);
                 }
             }, new Runnable() {
                 @Override
@@ -261,22 +286,43 @@ public class StatusBarKeyguardViewManager {
                 }
             });
         } else {
-            mPhoneStatusBar.setKeyguardFadingAway(delay, fadeoutDuration);
-            boolean staying = mPhoneStatusBar.hideKeyguard();
-            if (!staying) {
+            if (mFingerprintUnlockController.getMode()
+                    == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK_PULSING) {
+                mFingerprintUnlockController.startKeyguardFadingAway();
+                mPhoneStatusBar.setKeyguardFadingAway(startTime, 0, 240);
                 mStatusBarWindowManager.setKeyguardFadingAway(true);
-                mScrimController.animateKeyguardFadingOut(delay, fadeoutDuration, new Runnable() {
+                mPhoneStatusBar.fadeKeyguardWhilePulsing();
+                animateScrimControllerKeyguardFadingOut(0, 240, new Runnable() {
                     @Override
                     public void run() {
-                        mStatusBarWindowManager.setKeyguardFadingAway(false);
-                        mPhoneStatusBar.finishKeyguardFadingAway();
-                        WindowManagerGlobal.getInstance().trimMemory(
-                                ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+                        mPhoneStatusBar.hideKeyguard();
                     }
-                });
+                }, false /* skipFirstFrame */);
             } else {
-                mScrimController.animateGoingToFullShade(delay, fadeoutDuration);
-                mPhoneStatusBar.finishKeyguardFadingAway();
+                mFingerprintUnlockController.startKeyguardFadingAway();
+                mPhoneStatusBar.setKeyguardFadingAway(startTime, delay, fadeoutDuration);
+                boolean staying = mPhoneStatusBar.hideKeyguard();
+                if (!staying) {
+                    mStatusBarWindowManager.setKeyguardFadingAway(true);
+                    if (mFingerprintUnlockController.getMode()
+                            == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK) {
+                        if (!mScreenTurnedOn) {
+                            mDeferScrimFadeOut = true;
+                        } else {
+
+                            // Screen is already on, don't defer with fading out.
+                            animateScrimControllerKeyguardFadingOut(0,
+                                    WAKE_AND_UNLOCK_SCRIM_FADEOUT_DURATION_MS,
+                                    true /* skipFirstFrame */);
+                        }
+                    } else {
+                        animateScrimControllerKeyguardFadingOut(delay, fadeoutDuration,
+                                false /* skipFirstFrame */);
+                    }
+                } else {
+                    mScrimController.animateGoingToFullShade(delay, fadeoutDuration);
+                    mPhoneStatusBar.finishKeyguardFadingAway();
+                }
             }
             mStatusBarWindowManager.setKeyguardShowing(false);
             mBouncer.hide(true /* destroyView */);
@@ -284,7 +330,31 @@ public class StatusBarKeyguardViewManager {
             executeAfterKeyguardGoneAction();
             updateStates();
         }
+    }
 
+    private void animateScrimControllerKeyguardFadingOut(long delay, long duration,
+            boolean skipFirstFrame) {
+        animateScrimControllerKeyguardFadingOut(delay, duration, null /* endRunnable */,
+                skipFirstFrame);
+    }
+
+    private void animateScrimControllerKeyguardFadingOut(long delay, long duration,
+            final Runnable endRunnable, boolean skipFirstFrame) {
+        Trace.asyncTraceBegin(Trace.TRACE_TAG_VIEW, "Fading out", 0);
+        mScrimController.animateKeyguardFadingOut(delay, duration, new Runnable() {
+            @Override
+            public void run() {
+                if (endRunnable != null) {
+                    endRunnable.run();
+                }
+                mStatusBarWindowManager.setKeyguardFadingAway(false);
+                mPhoneStatusBar.finishKeyguardFadingAway();
+                mFingerprintUnlockController.finishKeyguardFadingAway();
+                WindowManagerGlobal.getInstance().trimMemory(
+                        ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+                Trace.asyncTraceEnd(Trace.TRACE_TAG_VIEW, "Fading out", 0);
+            }
+        }, skipFirstFrame);
     }
 
     private void executeAfterKeyguardGoneAction() {
@@ -298,7 +368,7 @@ public class StatusBarKeyguardViewManager {
      * Dismisses the keyguard by going to the next screen or making it gone.
      */
     public void dismiss() {
-        if (mScreenOn) {
+        if (mDeviceInteractive || mDeviceWillWakeUp) {
             showBouncer();
         }
     }
@@ -324,6 +394,7 @@ public class StatusBarKeyguardViewManager {
      */
     public boolean onBackPressed() {
         if (mBouncer.isShowing()) {
+            mPhoneStatusBar.endAffordanceLaunch();
             reset();
             return true;
         }
@@ -367,12 +438,19 @@ public class StatusBarKeyguardViewManager {
                 mContainer.setSystemUiVisibility(vis | View.STATUS_BAR_DISABLE_BACK);
             }
         }
-        if ((!(showing && !occluded) || bouncerShowing)
-                != (!(mLastShowing && !mLastOccluded) || mLastBouncerShowing) || mFirstUpdate) {
+
+        boolean navBarVisible = (!(showing && !occluded) || bouncerShowing);
+        boolean lastNavBarVisible = (!(mLastShowing && !mLastOccluded) || mLastBouncerShowing);
+        if (navBarVisible != lastNavBarVisible || mFirstUpdate) {
             if (mPhoneStatusBar.getNavigationBarView() != null) {
-                if (!(showing && !occluded) || bouncerShowing) {
-                    mContainer.postOnAnimationDelayed(mMakeNavigationBarVisibleRunnable,
-                            getNavBarShowDelay());
+                if (navBarVisible) {
+                    long delay = getNavBarShowDelay();
+                    if (delay == 0) {
+                        mMakeNavigationBarVisibleRunnable.run();
+                    } else {
+                        mContainer.postOnAnimationDelayed(mMakeNavigationBarVisibleRunnable,
+                                delay);
+                    }
                 } else {
                     mContainer.removeCallbacks(mMakeNavigationBarVisibleRunnable);
                     mPhoneStatusBar.getNavigationBarView().setVisibility(View.GONE);
@@ -388,7 +466,7 @@ public class StatusBarKeyguardViewManager {
 
         KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
         if ((showing && !occluded) != (mLastShowing && !mLastOccluded) || mFirstUpdate) {
-            updateMonitor.sendKeyguardVisibilityChanged(showing && !occluded);
+            updateMonitor.onKeyguardVisibilityChanged(showing && !occluded);
         }
         if (bouncerShowing != mLastBouncerShowing || mFirstUpdate) {
             updateMonitor.sendKeyguardBouncerChanged(bouncerShowing);
@@ -438,5 +516,30 @@ public class StatusBarKeyguardViewManager {
 
     public boolean isInputRestricted() {
         return mViewMediatorCallback.isInputRestricted();
+    }
+
+    public void keyguardGoingAway() {
+        mPhoneStatusBar.keyguardGoingAway();
+    }
+
+    public void animateCollapsePanels(float speedUpFactor) {
+        mPhoneStatusBar.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE, true /* force */,
+                false /* delayed */, speedUpFactor);
+    }
+
+    /**
+     * Notifies that the user has authenticated by other means than using the bouncer, for example,
+     * fingerprint.
+     */
+    public void notifyKeyguardAuthenticated(boolean strongAuth) {
+        mBouncer.notifyKeyguardAuthenticated(strongAuth);
+    }
+
+    public void showBouncerMessage(String message, int color) {
+        mBouncer.showMessage(message, color);
+    }
+
+    public ViewRootImpl getViewRootImpl() {
+        return mPhoneStatusBar.getStatusBarView().getViewRootImpl();
     }
 }

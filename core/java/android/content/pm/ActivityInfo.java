@@ -33,12 +33,16 @@ import java.lang.annotation.RetentionPolicy;
  */
 public class ActivityInfo extends ComponentInfo
         implements Parcelable {
+
+     // NOTE: When adding new data members be sure to update the copy-constructor, Parcel
+     // constructor, and writeToParcel.
+
     /**
      * A style resource identifier (in the package's resources) of this
      * activity's theme.  From the "theme" attribute or, if not set, 0.
      */
     public int theme;
-    
+
     /**
      * Constant corresponding to <code>standard</code> in
      * the {@link android.R.attr#launchMode} attribute.
@@ -223,11 +227,12 @@ public class ActivityInfo extends ComponentInfo
      */
     public static final int FLAG_HARDWARE_ACCELERATED = 0x0200;
     /**
-     * Value for {@link #flags}: true when the application can be displayed over the lockscreen
-     * and consequently over all users' windows.
+     * Value for {@link #flags}: true when the application can be displayed for all users
+     * regardless of if the user of the application is the current user. Set from the
+     * {@link android.R.attr#showForAllUsers} attribute.
      * @hide
      */
-    public static final int FLAG_SHOW_ON_LOCK_SCREEN = 0x0400;
+    public static final int FLAG_SHOW_FOR_ALL_USERS = 0x0400;
     /**
      * Bit in {@link #flags} corresponding to an immersive activity
      * that wishes not to be interrupted by notifications.
@@ -569,14 +574,32 @@ public class ActivityInfo extends ComponentInfo
         Configuration.NATIVE_CONFIG_DENSITY,                // DENSITY
         Configuration.NATIVE_CONFIG_LAYOUTDIR,              // LAYOUT DIRECTION
     };
-    /** @hide
+
+    /**
      * Convert Java change bits to native.
+     *
+     * @hide
      */
     public static int activityInfoConfigToNative(int input) {
         int output = 0;
-        for (int i=0; i<CONFIG_NATIVE_BITS.length; i++) {
-            if ((input&(1<<i)) != 0) {
+        for (int i = 0; i < CONFIG_NATIVE_BITS.length; i++) {
+            if ((input & (1 << i)) != 0) {
                 output |= CONFIG_NATIVE_BITS[i];
+            }
+        }
+        return output;
+    }
+
+    /**
+     * Convert native change bits to Java.
+     *
+     * @hide
+     */
+    public static int activityInfoConfigNativeToJava(int input) {
+        int output = 0;
+        for (int i = 0; i < CONFIG_NATIVE_BITS.length; i++) {
+            if ((input & CONFIG_NATIVE_BITS[i]) != 0) {
+                output |= (1 << i);
             }
         }
         return output;
@@ -609,7 +632,7 @@ public class ActivityInfo extends ComponentInfo
      * attribute.
      */
     public int configChanges;
-    
+
     /**
      * The desired soft input mode for this activity's main window.
      * Set from the {@link android.R.attr#windowSoftInputMode} attribute
@@ -641,6 +664,44 @@ public class ActivityInfo extends ComponentInfo
      */
     public String parentActivityName;
 
+    /**
+     * Value indicating if the activity is resizeable to any dimension.
+     * See {@link android.R.attr#resizeableActivity}.
+     * @hide
+     */
+    public boolean resizeable;
+
+    /** @hide */
+    public static final int LOCK_TASK_LAUNCH_MODE_DEFAULT = 0;
+    /** @hide */
+    public static final int LOCK_TASK_LAUNCH_MODE_NEVER = 1;
+    /** @hide */
+    public static final int LOCK_TASK_LAUNCH_MODE_ALWAYS = 2;
+    /** @hide */
+    public static final int LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED = 3;
+
+    /** @hide */
+    public static final String lockTaskLaunchModeToString(int lockTaskLaunchMode) {
+        switch (lockTaskLaunchMode) {
+            case LOCK_TASK_LAUNCH_MODE_DEFAULT:
+                return "LOCK_TASK_LAUNCH_MODE_DEFAULT";
+            case LOCK_TASK_LAUNCH_MODE_NEVER:
+                return "LOCK_TASK_LAUNCH_MODE_NEVER";
+            case LOCK_TASK_LAUNCH_MODE_ALWAYS:
+                return "LOCK_TASK_LAUNCH_MODE_ALWAYS";
+            case LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED:
+                return "LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED";
+            default:
+                return "unknown=" + lockTaskLaunchMode;
+        }
+    }
+    /**
+     * Value indicating if the activity is to be locked at startup. Takes on the values from
+     * {@link android.R.attr#lockTaskMode}.
+     * @hide
+     */
+    public int lockTaskLaunchMode;
+
     public ActivityInfo() {
     }
 
@@ -648,6 +709,7 @@ public class ActivityInfo extends ComponentInfo
         super(orig);
         theme = orig.theme;
         launchMode = orig.launchMode;
+        documentLaunchMode = orig.documentLaunchMode;
         permission = orig.permission;
         taskAffinity = orig.taskAffinity;
         targetActivity = orig.targetActivity;
@@ -658,13 +720,15 @@ public class ActivityInfo extends ComponentInfo
         uiOptions = orig.uiOptions;
         parentActivityName = orig.parentActivityName;
         maxRecents = orig.maxRecents;
+        resizeable = orig.resizeable;
+        lockTaskLaunchMode = orig.lockTaskLaunchMode;
     }
-    
+
     /**
      * Return the theme resource identifier to use for this activity.  If
      * the activity defines a theme, that is used; else, the application
      * theme is used.
-     * 
+     *
      * @return The theme associated with this activity.
      */
     public final int getThemeResource() {
@@ -702,6 +766,8 @@ public class ActivityInfo extends ComponentInfo
         if (uiOptions != 0) {
             pw.println(prefix + " uiOptions=0x" + Integer.toHexString(uiOptions));
         }
+        pw.println(prefix + "resizeable=" + resizeable + " lockTaskLaunchMode="
+                + lockTaskLaunchModeToString(lockTaskLaunchMode));
         super.dumpBack(pw, prefix);
     }
     
@@ -719,6 +785,7 @@ public class ActivityInfo extends ComponentInfo
         super.writeToParcel(dest, parcelableFlags);
         dest.writeInt(theme);
         dest.writeInt(launchMode);
+        dest.writeInt(documentLaunchMode);
         dest.writeString(permission);
         dest.writeString(taskAffinity);
         dest.writeString(targetActivity);
@@ -730,6 +797,8 @@ public class ActivityInfo extends ComponentInfo
         dest.writeString(parentActivityName);
         dest.writeInt(persistableMode);
         dest.writeInt(maxRecents);
+        dest.writeInt(resizeable ? 1 : 0);
+        dest.writeInt(lockTaskLaunchMode);
     }
 
     public static final Parcelable.Creator<ActivityInfo> CREATOR
@@ -746,6 +815,7 @@ public class ActivityInfo extends ComponentInfo
         super(source);
         theme = source.readInt();
         launchMode = source.readInt();
+        documentLaunchMode = source.readInt();
         permission = source.readString();
         taskAffinity = source.readString();
         targetActivity = source.readString();
@@ -757,5 +827,7 @@ public class ActivityInfo extends ComponentInfo
         parentActivityName = source.readString();
         persistableMode = source.readInt();
         maxRecents = source.readInt();
+        resizeable = (source.readInt() == 1);
+        lockTaskLaunchMode = source.readInt();
     }
 }

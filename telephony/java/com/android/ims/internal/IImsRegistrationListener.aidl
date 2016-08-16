@@ -16,6 +16,7 @@
 
 package com.android.ims.internal;
 
+import com.android.ims.ImsReasonInfo;
 /**
  * A listener type for receiving notifications about the changes to
  * the IMS connection(registration).
@@ -29,9 +30,14 @@ interface IImsRegistrationListener {
     void registrationConnected();
 
     /**
+     * Notifies the application when the device is trying to connect the IMS network.
+     */
+    void registrationProgressing();
+
+    /**
      * Notifies the application when the device is disconnected from the IMS network.
      */
-    void registrationDisconnected();
+    void registrationDisconnected(in ImsReasonInfo imsReasonInfo);
 
     /**
      * Notifies the application when its suspended IMS connection is resumed,
@@ -65,5 +71,11 @@ interface IImsRegistrationListener {
      * @param disabledFeatures features disabled as defined in com.android.ims.ImsConfig#FeatureConstants.
      */
     void registrationFeatureCapabilityChanged(int serviceClass,
-            out int[] enabledFeatures, out int[] disabledFeatures);
+            in int[] enabledFeatures, in int[] disabledFeatures);
+
+    /**
+     * Updates the application with the waiting voice message count.
+     * @param count The number of waiting voice messages.
+     */
+    void voiceMessageCountUpdate(int count);
 }

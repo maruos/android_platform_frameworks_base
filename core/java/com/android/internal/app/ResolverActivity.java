@@ -16,14 +16,17 @@
 
 package com.android.internal.app;
 
+import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityThread;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
+import android.app.VoiceInteractor.PickOptionRequest;
+import android.app.VoiceInteractor.PickOptionRequest.Option;
+import android.app.VoiceInteractor.Prompt;
 import android.os.AsyncTask;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Slog;
+import android.view.View.OnAttachStateChangeListener;
 import android.widget.AbsListView;
 import com.android.internal.R;
 import com.android.internal.content.PackageMonitor;
@@ -64,14 +67,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 import com.android.internal.widget.ResolverDrawerLayout;
 
-import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
@@ -82,7 +83,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
  * which there is more than one matching activity, allowing the user to decide
  * which to go to.  It is not normally used directly by application developers.
  */
-public class ResolverActivity extends Activity implements AdapterView.OnItemClickListener {
+public class ResolverActivity extends Activity {
     private static final String TAG = "ResolverActivity";
     private static final boolean DEBUG = false;
 
@@ -91,22 +92,19 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
     private PackageManager mPm;
     private boolean mSafeForwardingMode;
     private boolean mAlwaysUseOption;
-    private boolean mShowExtended;
-    private ListView mListView;
+    private AbsListView mAdapterView;
     private Button mAlwaysButton;
     private Button mOnceButton;
     private View mProfileView;
     private int mIconDpi;
-    private int mIconSize;
-    private int mMaxColumns;
-    private int mLastSelected = ListView.INVALID_POSITION;
+    private int mLastSelected = AbsListView.INVALID_POSITION;
     private boolean mResolvingHome = false;
     private int mProfileSwitchMessageId = -1;
-    private Intent mIntent;
+    private final ArrayList<Intent> mIntents = new ArrayList<>();
+    private ResolverComparator mResolverComparator;
+    private PickTargetOptionRequest mPickOptionRequest;
 
-    private UsageStatsManager mUsm;
-    private Map<String, UsageStats> mStats;
-    private static final long USAGE_STATS_PERIOD = 1000 * 60 * 60 * 24 * 14;
+    protected ResolverDrawerLayout mResolverDrawerLayout;
 
     private boolean mRegistered;
     private final PackageMonitor mPackageMonitor = new PackageMonitor() {
@@ -192,7 +190,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
     }
 
     /**
-     * Compatibility version for other bundled services that use this ocerload without
+     * Compatibility version for other bundled services that use this overload without
      * a default title resource
      */
     protected void onCreate(Bundle savedInstanceState, Intent intent,
@@ -217,36 +215,6 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         } catch (RemoteException e) {
             mLaunchedFromUid = -1;
         }
-        mPm = getPackageManager();
-        mUsm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-
-        final long sinceTime = System.currentTimeMillis() - USAGE_STATS_PERIOD;
-        mStats = mUsm.queryAndAggregateUsageStats(sinceTime, System.currentTimeMillis());
-
-        mMaxColumns = getResources().getInteger(R.integer.config_maxResolverActivityColumns);
-
-        mPackageMonitor.register(this, getMainLooper(), false);
-        mRegistered = true;
-
-        final ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        mIconDpi = am.getLauncherLargeIconDensity();
-        mIconSize = am.getLauncherLargeIconSize();
-
-        mIntent = new Intent(intent);
-        mAdapter = new ResolveListAdapter(this, initialIntents, rList,
-                mLaunchedFromUid, alwaysUseOption);
-
-        final int layoutId;
-        final boolean useHeader;
-        if (mAdapter.hasFilteredItem()) {
-            layoutId = R.layout.resolver_list_with_default;
-            alwaysUseOption = false;
-            useHeader = true;
-        } else {
-            useHeader = false;
-            layoutId = R.layout.resolver_list;
-        }
-        mAlwaysUseOption = alwaysUseOption;
 
         if (mLaunchedFromUid < 0 || UserHandle.isIsolated(mLaunchedFromUid)) {
             // Gulp!
@@ -254,37 +222,25 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             return;
         }
 
-        int count = mAdapter.mList.size();
-        if (count > 1 || (count == 1 && mAdapter.getOtherProfile() != null)) {
-            setContentView(layoutId);
-            mListView = (ListView) findViewById(R.id.resolver_list);
-            mListView.setAdapter(mAdapter);
-            mListView.setOnItemClickListener(this);
-            mListView.setOnItemLongClickListener(new ItemLongClickListener());
+        mPm = getPackageManager();
 
-            if (alwaysUseOption) {
-                mListView.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
-            }
+        mPackageMonitor.register(this, getMainLooper(), false);
+        mRegistered = true;
 
-            if (useHeader) {
-                mListView.addHeaderView(LayoutInflater.from(this).inflate(
-                        R.layout.resolver_different_item_header, mListView, false));
-            }
-        } else if (count == 1) {
-            safelyStartActivity(mAdapter.intentForPosition(0, false));
-            mPackageMonitor.unregister();
-            mRegistered = false;
-            finish();
+        final ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        mIconDpi = am.getLauncherLargeIconDensity();
+
+        // Add our initial intent as the first item, regardless of what else has already been added.
+        mIntents.add(0, new Intent(intent));
+
+        final String referrerPackage = getReferrerPackageName();
+
+        mResolverComparator = new ResolverComparator(this, getTargetIntent(), referrerPackage);
+
+        if (configureContentView(mIntents, initialIntents, rList, alwaysUseOption)) {
             return;
-        } else {
-            setContentView(R.layout.resolver_list);
-
-            final TextView empty = (TextView) findViewById(R.id.empty);
-            empty.setVisibility(View.VISIBLE);
-
-            mListView = (ListView) findViewById(R.id.resolver_list);
-            mListView.setVisibility(View.GONE);
         }
+
         // Prevent the Resolver window from becoming the top fullscreen window and thus from taking
         // control of the system bars.
         getWindow().clearFlags(FLAG_LAYOUT_IN_SCREEN|FLAG_LAYOUT_INSET_DECOR);
@@ -297,6 +253,10 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                     finish();
                 }
             });
+            if (isVoiceInteraction()) {
+                rdl.setCollapsed(false);
+            }
+            mResolverDrawerLayout = rdl;
         }
 
         if (title == null) {
@@ -308,12 +268,29 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                 titleView.setText(title);
             }
             setTitle(title);
+
+            // Try to initialize the title icon if we have a view for it and a title to match
+            final ImageView titleIcon = (ImageView) findViewById(R.id.title_icon);
+            if (titleIcon != null) {
+                ApplicationInfo ai = null;
+                try {
+                    if (!TextUtils.isEmpty(referrerPackage)) {
+                        ai = mPm.getApplicationInfo(referrerPackage, 0);
+                    }
+                } catch (NameNotFoundException e) {
+                    Log.e(TAG, "Could not find referrer package " + referrerPackage);
+                }
+
+                if (ai != null) {
+                    titleIcon.setImageDrawable(ai.loadIcon(mPm));
+                }
+            }
         }
 
         final ImageView iconView = (ImageView) findViewById(R.id.icon);
         final DisplayResolveInfo iconInfo = mAdapter.getFilteredItem();
         if (iconView != null && iconInfo != null) {
-            new LoadIconIntoViewTask(iconView).execute(iconInfo);
+            new LoadIconIntoViewTask(iconInfo, iconView).execute();
         }
 
         if (alwaysUseOption || mAdapter.hasFilteredItem()) {
@@ -342,13 +319,84 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                         return;
                     }
 
-                    final Intent intent = intentForDisplayResolveInfo(dri);
-                    onIntentSelected(dri.ri, intent, false);
+                    // Do not show the profile switch message anymore.
+                    mProfileSwitchMessageId = -1;
+
+                    onTargetSelected(dri, false);
                     finish();
                 }
             });
             bindProfileView();
         }
+
+        if (isVoiceInteraction()) {
+            onSetupVoiceInteraction();
+        }
+
+        getWindow().getDecorView().addOnAttachStateChangeListener(
+                new OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                v.getViewRootImpl().setDrawDuringWindowsAnimating(true);
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+            }
+        });
+    }
+
+    /**
+     * Perform any initialization needed for voice interaction.
+     */
+    void onSetupVoiceInteraction() {
+        // Do it right now. Subclasses may delay this and send it later.
+        sendVoiceChoicesIfNeeded();
+    }
+
+    void sendVoiceChoicesIfNeeded() {
+        if (!isVoiceInteraction()) {
+            // Clearly not needed.
+            return;
+        }
+
+
+        final Option[] options = new Option[mAdapter.getCount()];
+        for (int i = 0, N = options.length; i < N; i++) {
+            options[i] = optionForChooserTarget(mAdapter.getItem(i), i);
+        }
+
+        mPickOptionRequest = new PickTargetOptionRequest(
+                new Prompt(getTitle()), options, null);
+        getVoiceInteractor().submitRequest(mPickOptionRequest);
+    }
+
+    Option optionForChooserTarget(TargetInfo target, int index) {
+        return new Option(target.getDisplayLabel(), index);
+    }
+
+    protected final void setAdditionalTargets(Intent[] intents) {
+        if (intents != null) {
+            for (Intent intent : intents) {
+                mIntents.add(intent);
+            }
+        }
+    }
+
+    public Intent getTargetIntent() {
+        return mIntents.isEmpty() ? null : mIntents.get(0);
+    }
+
+    private String getReferrerPackageName() {
+        final Uri referrer = getReferrer();
+        if (referrer != null && "android-app".equals(referrer.getScheme())) {
+            return referrer.getHost();
+        }
+        return null;
+    }
+
+    int getLayoutResource() {
+        return R.layout.resolver_list;
     }
 
     void bindProfileView() {
@@ -357,11 +405,11 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             mProfileView.setVisibility(View.VISIBLE);
             final ImageView icon = (ImageView) mProfileView.findViewById(R.id.icon);
             final TextView text = (TextView) mProfileView.findViewById(R.id.text1);
-            if (dri.displayIcon == null) {
-                new LoadIconTask().execute(dri);
+            if (!dri.hasDisplayIcon()) {
+                new LoadIconIntoViewTask(dri, icon).execute();
             }
-            icon.setImageDrawable(dri.displayIcon);
-            text.setText(dri.displayLabel);
+            icon.setImageDrawable(dri.getDisplayIcon());
+            text.setText(dri.getDisplayLabel());
         } else {
             mProfileView.setVisibility(View.GONE);
         }
@@ -405,8 +453,9 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         if (title == ActionTitle.DEFAULT && defaultTitleRes != 0) {
             return getString(defaultTitleRes);
         } else {
-            return named ? getString(title.namedTitleRes, mAdapter.getFilteredItem().displayLabel) :
-                    getString(title.titleRes);
+            return named
+                    ? getString(title.namedTitleRes, mAdapter.getFilteredItem().getDisplayLabel())
+                    : getString(title.titleRes);
         }
     }
 
@@ -469,7 +518,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             mPackageMonitor.unregister();
             mRegistered = false;
         }
-        if ((getIntent().getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+        if ((getIntent().getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK) != 0 && !isVoiceInteraction()) {
             // This resolver is in the unusual situation where it has been
             // launched at the top of a new task.  We don't let it be added
             // to the recent tasks shown to the user, and we need to make sure
@@ -484,47 +533,25 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
     }
 
     @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (!isChangingConfigurations() && mPickOptionRequest != null) {
+            mPickOptionRequest.cancel();
+        }
+    }
+
+    @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
         if (mAlwaysUseOption) {
-            final int checkedPos = mListView.getCheckedItemPosition();
+            final int checkedPos = mAdapterView.getCheckedItemPosition();
             final boolean hasValidSelection = checkedPos != ListView.INVALID_POSITION;
             mLastSelected = checkedPos;
             setAlwaysButtonEnabled(hasValidSelection, checkedPos, true);
             mOnceButton.setEnabled(hasValidSelection);
             if (hasValidSelection) {
-                mListView.setSelection(checkedPos);
+                mAdapterView.setSelection(checkedPos);
             }
-        }
-    }
-
-    @Override
-    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-        position -= mListView.getHeaderViewsCount();
-        if (position < 0) {
-            // Header views don't count.
-            return;
-        }
-        ResolveInfo resolveInfo = mAdapter.resolveInfoForPosition(position, true);
-        if (mResolvingHome && hasManagedProfile()
-                && !supportsManagedProfiles(resolveInfo)) {
-            Toast.makeText(this, String.format(getResources().getString(
-                    com.android.internal.R.string.activity_resolver_work_profiles_support),
-                    resolveInfo.activityInfo.loadLabel(getPackageManager()).toString()),
-                    Toast.LENGTH_LONG).show();
-            return;
-        }
-        final int checkedPos = mListView.getCheckedItemPosition();
-        final boolean hasValidSelection = checkedPos != ListView.INVALID_POSITION;
-        if (mAlwaysUseOption && (!hasValidSelection || mLastSelected != checkedPos)) {
-            setAlwaysButtonEnabled(hasValidSelection, checkedPos, true);
-            mOnceButton.setEnabled(hasValidSelection);
-            if (hasValidSelection) {
-                mListView.smoothScrollToPosition(checkedPos);
-            }
-            mLastSelected = checkedPos;
-        } else {
-            startSelected(position, false, true);
         }
     }
 
@@ -551,14 +578,10 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         try {
             ApplicationInfo appInfo = getPackageManager().getApplicationInfo(
                     resolveInfo.activityInfo.packageName, 0 /* default flags */);
-            return versionNumberAtLeastL(appInfo.targetSdkVersion);
+            return appInfo.targetSdkVersion >= Build.VERSION_CODES.LOLLIPOP;
         } catch (NameNotFoundException e) {
             return false;
         }
-    }
-
-    private boolean versionNumberAtLeastL(int versionNumber) {
-        return versionNumber >= Build.VERSION_CODES.LOLLIPOP;
     }
 
     private void setAlwaysButtonEnabled(boolean hasValidSelection, int checkedPos,
@@ -576,10 +599,9 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
     public void onButtonClick(View v) {
         final int id = v.getId();
         startSelected(mAlwaysUseOption ?
-                mListView.getCheckedItemPosition() : mAdapter.getFilteredPosition(),
+                        mAdapterView.getCheckedItemPosition() : mAdapter.getFilteredPosition(),
                 id == R.id.button_always,
                 mAlwaysUseOption);
-        dismiss();
     }
 
     void startSelected(int which, boolean always, boolean filtered) {
@@ -587,9 +609,18 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             return;
         }
         ResolveInfo ri = mAdapter.resolveInfoForPosition(which, filtered);
-        Intent intent = mAdapter.intentForPosition(which, filtered);
-        onIntentSelected(ri, intent, always);
-        finish();
+        if (mResolvingHome && hasManagedProfile() && !supportsManagedProfiles(ri)) {
+            Toast.makeText(this, String.format(getResources().getString(
+                    com.android.internal.R.string.activity_resolver_work_profiles_support),
+                    ri.activityInfo.loadLabel(getPackageManager()).toString()),
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        TargetInfo target = mAdapter.targetInfoForPosition(which, filtered);
+        if (onTargetSelected(target, always)) {
+            finish();
+        }
     }
 
     /**
@@ -599,13 +630,18 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         return defIntent;
     }
 
-    protected void onIntentSelected(ResolveInfo ri, Intent intent, boolean alwaysCheck) {
-        if ((mAlwaysUseOption || mAdapter.hasFilteredItem()) && mAdapter.mOrigResolveList != null) {
+    protected boolean onTargetSelected(TargetInfo target, boolean alwaysCheck) {
+        final ResolveInfo ri = target.getResolveInfo();
+        final Intent intent = target != null ? target.getResolvedIntent() : null;
+
+        if (intent != null && (mAlwaysUseOption || mAdapter.hasFilteredItem())
+                && mAdapter.mOrigResolveList != null) {
             // Build a reasonable intent filter, based on what matched.
             IntentFilter filter = new IntentFilter();
+            String action = intent.getAction();
 
-            if (intent.getAction() != null) {
-                filter.addAction(intent.getAction());
+            if (action != null) {
+                filter.addAction(action);
             }
             Set<String> categories = intent.getCategories();
             if (categories != null) {
@@ -615,7 +651,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             }
             filter.addCategory(Intent.CATEGORY_DEFAULT);
 
-            int cat = ri.match&IntentFilter.MATCH_CATEGORY_MASK;
+            int cat = ri.match & IntentFilter.MATCH_CATEGORY_MASK;
             Uri data = intent.getData();
             if (cat == IntentFilter.MATCH_CATEGORY_TYPE) {
                 String mimeType = intent.resolveType(this);
@@ -681,14 +717,44 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                 ComponentName[] set = new ComponentName[N];
                 int bestMatch = 0;
                 for (int i=0; i<N; i++) {
-                    ResolveInfo r = mAdapter.mOrigResolveList.get(i);
+                    ResolveInfo r = mAdapter.mOrigResolveList.get(i).getResolveInfoAt(0);
                     set[i] = new ComponentName(r.activityInfo.packageName,
                             r.activityInfo.name);
                     if (r.match > bestMatch) bestMatch = r.match;
                 }
                 if (alwaysCheck) {
-                    getPackageManager().addPreferredActivity(filter, bestMatch, set,
-                            intent.getComponent());
+                    final int userId = getUserId();
+                    final PackageManager pm = getPackageManager();
+
+                    // Set the preferred Activity
+                    pm.addPreferredActivity(filter, bestMatch, set, intent.getComponent());
+
+                    if (ri.handleAllWebDataURI) {
+                        // Set default Browser if needed
+                        final String packageName = pm.getDefaultBrowserPackageName(userId);
+                        if (TextUtils.isEmpty(packageName)) {
+                            pm.setDefaultBrowserPackageName(ri.activityInfo.packageName, userId);
+                        }
+                    } else {
+                        // Update Domain Verification status
+                        ComponentName cn = intent.getComponent();
+                        String packageName = cn.getPackageName();
+                        String dataScheme = (data != null) ? data.getScheme() : null;
+
+                        boolean isHttpOrHttps = (dataScheme != null) &&
+                                (dataScheme.equals(IntentFilter.SCHEME_HTTP) ||
+                                        dataScheme.equals(IntentFilter.SCHEME_HTTPS));
+
+                        boolean isViewAction = (action != null) && action.equals(Intent.ACTION_VIEW);
+                        boolean hasCategoryBrowsable = (categories != null) &&
+                                categories.contains(Intent.CATEGORY_BROWSABLE);
+
+                        if (isHttpOrHttps && isViewAction && hasCategoryBrowsable) {
+                            pm.updateIntentVerificationStatus(packageName,
+                                    PackageManager.INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS,
+                                    userId);
+                        }
+                    }
                 } else {
                     try {
                         AppGlobals.getPackageManager().setLastChosenActivity(intent,
@@ -702,25 +768,28 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             }
         }
 
-        if (intent != null) {
-            safelyStartActivity(intent);
+        if (target != null) {
+            safelyStartActivity(target);
         }
+        return true;
     }
 
-    public void safelyStartActivity(Intent intent) {
+    void safelyStartActivity(TargetInfo cti) {
         // If needed, show that intent is forwarded
         // from managed profile to owner or other way around.
         if (mProfileSwitchMessageId != -1) {
             Toast.makeText(this, getString(mProfileSwitchMessageId), Toast.LENGTH_LONG).show();
         }
         if (!mSafeForwardingMode) {
-            startActivity(intent);
-            onActivityStarted(intent);
+            if (cti.start(this, null)) {
+                onActivityStarted(cti);
+            }
             return;
         }
         try {
-            startActivityAsCaller(intent, null, UserHandle.USER_NULL);
-            onActivityStarted(intent);
+            if (cti.startAsCaller(this, null, UserHandle.USER_NULL)) {
+                onActivityStarted(cti);
+            }
         } catch (RuntimeException e) {
             String launchedFromPackage;
             try {
@@ -735,65 +804,370 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         }
     }
 
-    public void onActivityStarted(Intent intent) {
+    void onActivityStarted(TargetInfo cti) {
         // Do nothing
+    }
+
+    boolean shouldGetActivityMetadata() {
+        return false;
+    }
+
+    boolean shouldAutoLaunchSingleChoice(TargetInfo target) {
+        return true;
     }
 
     void showAppDetails(ResolveInfo ri) {
         Intent in = new Intent().setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                 .setData(Uri.fromParts("package", ri.activityInfo.packageName, null))
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
         startActivity(in);
     }
 
-    Intent intentForDisplayResolveInfo(DisplayResolveInfo dri) {
-        Intent intent = new Intent(dri.origIntent != null ? dri.origIntent :
-                getReplacementIntent(dri.ri.activityInfo, mIntent));
-        intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT
-                |Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
-        ActivityInfo ai = dri.ri.activityInfo;
-        intent.setComponent(new ComponentName(
-                ai.applicationInfo.packageName, ai.name));
-        return intent;
+    ResolveListAdapter createAdapter(Context context, List<Intent> payloadIntents,
+            Intent[] initialIntents, List<ResolveInfo> rList, int launchedFromUid,
+            boolean filterLastUsed) {
+        return new ResolveListAdapter(context, payloadIntents, initialIntents, rList,
+                launchedFromUid, filterLastUsed);
     }
 
-    private final class DisplayResolveInfo {
-        ResolveInfo ri;
-        CharSequence displayLabel;
-        Drawable displayIcon;
-        CharSequence extendedInfo;
-        Intent origIntent;
+    /**
+     * Returns true if the activity is finishing and creation should halt
+     */
+    boolean configureContentView(List<Intent> payloadIntents, Intent[] initialIntents,
+            List<ResolveInfo> rList, boolean alwaysUseOption) {
+        // The last argument of createAdapter is whether to do special handling
+        // of the last used choice to highlight it in the list.  We need to always
+        // turn this off when running under voice interaction, since it results in
+        // a more complicated UI that the current voice interaction flow is not able
+        // to handle.
+        mAdapter = createAdapter(this, payloadIntents, initialIntents, rList,
+                mLaunchedFromUid, alwaysUseOption && !isVoiceInteraction());
 
-        DisplayResolveInfo(ResolveInfo pri, CharSequence pLabel,
-                CharSequence pInfo, Intent pOrigIntent) {
-            ri = pri;
-            displayLabel = pLabel;
-            extendedInfo = pInfo;
-            origIntent = pOrigIntent;
+        final int layoutId;
+        if (mAdapter.hasFilteredItem()) {
+            layoutId = R.layout.resolver_list_with_default;
+            alwaysUseOption = false;
+        } else {
+            layoutId = getLayoutResource();
+        }
+        mAlwaysUseOption = alwaysUseOption;
+
+        int count = mAdapter.getUnfilteredCount();
+        if (count == 1 && mAdapter.getOtherProfile() == null) {
+            // Only one target, so we're a candidate to auto-launch!
+            final TargetInfo target = mAdapter.targetInfoForPosition(0, false);
+            if (shouldAutoLaunchSingleChoice(target)) {
+                safelyStartActivity(target);
+                mPackageMonitor.unregister();
+                mRegistered = false;
+                finish();
+                return true;
+            }
+        }
+        if (count > 0) {
+            setContentView(layoutId);
+            mAdapterView = (AbsListView) findViewById(R.id.resolver_list);
+            onPrepareAdapterView(mAdapterView, mAdapter, alwaysUseOption);
+        } else {
+            setContentView(R.layout.resolver_list);
+
+            final TextView empty = (TextView) findViewById(R.id.empty);
+            empty.setVisibility(View.VISIBLE);
+
+            mAdapterView = (AbsListView) findViewById(R.id.resolver_list);
+            mAdapterView.setVisibility(View.GONE);
+        }
+        return false;
+    }
+
+    void onPrepareAdapterView(AbsListView adapterView, ResolveListAdapter adapter,
+            boolean alwaysUseOption) {
+        final boolean useHeader = adapter.hasFilteredItem();
+        final ListView listView = adapterView instanceof ListView ? (ListView) adapterView : null;
+
+        adapterView.setAdapter(mAdapter);
+
+        final ItemClickListener listener = new ItemClickListener();
+        adapterView.setOnItemClickListener(listener);
+        adapterView.setOnItemLongClickListener(listener);
+
+        if (alwaysUseOption) {
+            listView.setChoiceMode(AbsListView.CHOICE_MODE_SINGLE);
+        }
+
+        if (useHeader && listView != null) {
+            listView.addHeaderView(LayoutInflater.from(this).inflate(
+                    R.layout.resolver_different_item_header, listView, false));
         }
     }
 
-    private final class ResolveListAdapter extends BaseAdapter {
+    /**
+     * Check a simple match for the component of two ResolveInfos.
+     */
+    static boolean resolveInfoMatch(ResolveInfo lhs, ResolveInfo rhs) {
+        return lhs == null ? rhs == null
+                : lhs.activityInfo == null ? rhs.activityInfo == null
+                : Objects.equals(lhs.activityInfo.name, rhs.activityInfo.name)
+                && Objects.equals(lhs.activityInfo.packageName, rhs.activityInfo.packageName);
+    }
+
+    final class DisplayResolveInfo implements TargetInfo {
+        private final ResolveInfo mResolveInfo;
+        private final CharSequence mDisplayLabel;
+        private Drawable mDisplayIcon;
+        private Drawable mBadge;
+        private final CharSequence mExtendedInfo;
+        private final Intent mResolvedIntent;
+        private final List<Intent> mSourceIntents = new ArrayList<>();
+
+        DisplayResolveInfo(Intent originalIntent, ResolveInfo pri, CharSequence pLabel,
+                CharSequence pInfo, Intent pOrigIntent) {
+            mSourceIntents.add(originalIntent);
+            mResolveInfo = pri;
+            mDisplayLabel = pLabel;
+            mExtendedInfo = pInfo;
+
+            final Intent intent = new Intent(pOrigIntent != null ? pOrigIntent :
+                    getReplacementIntent(pri.activityInfo, getTargetIntent()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT
+                    | Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
+            final ActivityInfo ai = mResolveInfo.activityInfo;
+            intent.setComponent(new ComponentName(ai.applicationInfo.packageName, ai.name));
+
+            mResolvedIntent = intent;
+        }
+
+        private DisplayResolveInfo(DisplayResolveInfo other, Intent fillInIntent, int flags) {
+            mSourceIntents.addAll(other.getAllSourceIntents());
+            mResolveInfo = other.mResolveInfo;
+            mDisplayLabel = other.mDisplayLabel;
+            mDisplayIcon = other.mDisplayIcon;
+            mExtendedInfo = other.mExtendedInfo;
+            mResolvedIntent = new Intent(other.mResolvedIntent);
+            mResolvedIntent.fillIn(fillInIntent, flags);
+        }
+
+        public ResolveInfo getResolveInfo() {
+            return mResolveInfo;
+        }
+
+        public CharSequence getDisplayLabel() {
+            return mDisplayLabel;
+        }
+
+        public Drawable getDisplayIcon() {
+            return mDisplayIcon;
+        }
+
+        public Drawable getBadgeIcon() {
+            // We only expose a badge if we have extended info.
+            // The badge is a higher-priority disambiguation signal
+            // but we don't need one if we wouldn't show extended info at all.
+            if (TextUtils.isEmpty(getExtendedInfo())) {
+                return null;
+            }
+
+            if (mBadge == null && mResolveInfo != null && mResolveInfo.activityInfo != null
+                    && mResolveInfo.activityInfo.applicationInfo != null) {
+                if (mResolveInfo.activityInfo.icon == 0 || mResolveInfo.activityInfo.icon
+                        == mResolveInfo.activityInfo.applicationInfo.icon) {
+                    // Badging an icon with exactly the same icon is silly.
+                    // If the activityInfo icon resid is 0 it will fall back
+                    // to the application's icon, making it a match.
+                    return null;
+                }
+                mBadge = mResolveInfo.activityInfo.applicationInfo.loadIcon(mPm);
+            }
+            return mBadge;
+        }
+
+        @Override
+        public CharSequence getBadgeContentDescription() {
+            return null;
+        }
+
+        @Override
+        public TargetInfo cloneFilledIn(Intent fillInIntent, int flags) {
+            return new DisplayResolveInfo(this, fillInIntent, flags);
+        }
+
+        @Override
+        public List<Intent> getAllSourceIntents() {
+            return mSourceIntents;
+        }
+
+        public void addAlternateSourceIntent(Intent alt) {
+            mSourceIntents.add(alt);
+        }
+
+        public void setDisplayIcon(Drawable icon) {
+            mDisplayIcon = icon;
+        }
+
+        public boolean hasDisplayIcon() {
+            return mDisplayIcon != null;
+        }
+
+        public CharSequence getExtendedInfo() {
+            return mExtendedInfo;
+        }
+
+        public Intent getResolvedIntent() {
+            return mResolvedIntent;
+        }
+
+        @Override
+        public ComponentName getResolvedComponentName() {
+            return new ComponentName(mResolveInfo.activityInfo.packageName,
+                    mResolveInfo.activityInfo.name);
+        }
+
+        @Override
+        public boolean start(Activity activity, Bundle options) {
+            activity.startActivity(mResolvedIntent, options);
+            return true;
+        }
+
+        @Override
+        public boolean startAsCaller(Activity activity, Bundle options, int userId) {
+            activity.startActivityAsCaller(mResolvedIntent, options, false, userId);
+            return true;
+        }
+
+        @Override
+        public boolean startAsUser(Activity activity, Bundle options, UserHandle user) {
+            activity.startActivityAsUser(mResolvedIntent, options, user);
+            return false;
+        }
+    }
+
+    /**
+     * A single target as represented in the chooser.
+     */
+    public interface TargetInfo {
+        /**
+         * Get the resolved intent that represents this target. Note that this may not be the
+         * intent that will be launched by calling one of the <code>start</code> methods provided;
+         * this is the intent that will be credited with the launch.
+         *
+         * @return the resolved intent for this target
+         */
+        public Intent getResolvedIntent();
+
+        /**
+         * Get the resolved component name that represents this target. Note that this may not
+         * be the component that will be directly launched by calling one of the <code>start</code>
+         * methods provided; this is the component that will be credited with the launch.
+         *
+         * @return the resolved ComponentName for this target
+         */
+        public ComponentName getResolvedComponentName();
+
+        /**
+         * Start the activity referenced by this target.
+         *
+         * @param activity calling Activity performing the launch
+         * @param options ActivityOptions bundle
+         * @return true if the start completed successfully
+         */
+        public boolean start(Activity activity, Bundle options);
+
+        /**
+         * Start the activity referenced by this target as if the ResolverActivity's caller
+         * was performing the start operation.
+         *
+         * @param activity calling Activity (actually) performing the launch
+         * @param options ActivityOptions bundle
+         * @param userId userId to start as or {@link UserHandle#USER_NULL} for activity's caller
+         * @return true if the start completed successfully
+         */
+        public boolean startAsCaller(Activity activity, Bundle options, int userId);
+
+        /**
+         * Start the activity referenced by this target as a given user.
+         *
+         * @param activity calling activity performing the launch
+         * @param options ActivityOptions bundle
+         * @param user handle for the user to start the activity as
+         * @return true if the start completed successfully
+         */
+        public boolean startAsUser(Activity activity, Bundle options, UserHandle user);
+
+        /**
+         * Return the ResolveInfo about how and why this target matched the original query
+         * for available targets.
+         *
+         * @return ResolveInfo representing this target's match
+         */
+        public ResolveInfo getResolveInfo();
+
+        /**
+         * Return the human-readable text label for this target.
+         *
+         * @return user-visible target label
+         */
+        public CharSequence getDisplayLabel();
+
+        /**
+         * Return any extended info for this target. This may be used to disambiguate
+         * otherwise identical targets.
+         *
+         * @return human-readable disambig string or null if none present
+         */
+        public CharSequence getExtendedInfo();
+
+        /**
+         * @return The drawable that should be used to represent this target
+         */
+        public Drawable getDisplayIcon();
+
+        /**
+         * @return The (small) icon to badge the target with
+         */
+        public Drawable getBadgeIcon();
+
+        /**
+         * @return The content description for the badge icon
+         */
+        public CharSequence getBadgeContentDescription();
+
+        /**
+         * Clone this target with the given fill-in information.
+         */
+        public TargetInfo cloneFilledIn(Intent fillInIntent, int flags);
+
+        /**
+         * @return the list of supported source intents deduped against this single target
+         */
+        public List<Intent> getAllSourceIntents();
+    }
+
+    class ResolveListAdapter extends BaseAdapter {
+        private final List<Intent> mIntents;
         private final Intent[] mInitialIntents;
         private final List<ResolveInfo> mBaseResolveList;
         private ResolveInfo mLastChosen;
         private DisplayResolveInfo mOtherProfile;
         private final int mLaunchedFromUid;
-        private final LayoutInflater mInflater;
+        private boolean mHasExtendedInfo;
 
-        List<DisplayResolveInfo> mList;
-        List<ResolveInfo> mOrigResolveList;
+        protected final LayoutInflater mInflater;
+
+        List<DisplayResolveInfo> mDisplayList;
+        List<ResolvedComponentInfo> mOrigResolveList;
 
         private int mLastChosenPosition = -1;
         private boolean mFilterLastUsed;
 
-        public ResolveListAdapter(Context context, Intent[] initialIntents,
-                List<ResolveInfo> rList, int launchedFromUid, boolean filterLastUsed) {
+        public ResolveListAdapter(Context context, List<Intent> payloadIntents,
+                Intent[] initialIntents, List<ResolveInfo> rList, int launchedFromUid,
+                boolean filterLastUsed) {
+            mIntents = payloadIntents;
             mInitialIntents = initialIntents;
             mBaseResolveList = rList;
             mLaunchedFromUid = launchedFromUid;
             mInflater = LayoutInflater.from(context);
-            mList = new ArrayList<DisplayResolveInfo>();
+            mDisplayList = new ArrayList<>();
             mFilterLastUsed = filterLastUsed;
             rebuildList();
         }
@@ -810,7 +1184,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         public DisplayResolveInfo getFilteredItem() {
             if (mFilterLastUsed && mLastChosenPosition >= 0) {
                 // Not using getItem since it offsets to dodge this position for the list
-                return mList.get(mLastChosenPosition);
+                return mDisplayList.get(mLastChosenPosition);
             }
             return null;
         }
@@ -830,24 +1204,45 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             return mFilterLastUsed && mLastChosenPosition >= 0;
         }
 
+        public float getScore(DisplayResolveInfo target) {
+            return mResolverComparator.getScore(target.getResolvedComponentName());
+        }
+
         private void rebuildList() {
-            List<ResolveInfo> currentResolveList;
+            List<ResolvedComponentInfo> currentResolveList = null;
 
             try {
+                final Intent primaryIntent = getTargetIntent();
                 mLastChosen = AppGlobals.getPackageManager().getLastChosenActivity(
-                        mIntent, mIntent.resolveTypeIfNeeded(getContentResolver()),
+                        primaryIntent, primaryIntent.resolveTypeIfNeeded(getContentResolver()),
                         PackageManager.MATCH_DEFAULT_ONLY);
             } catch (RemoteException re) {
                 Log.d(TAG, "Error calling setLastChosenActivity\n" + re);
             }
 
-            mList.clear();
+            // Clear the value of mOtherProfile from previous call.
+            mOtherProfile = null;
+            mDisplayList.clear();
             if (mBaseResolveList != null) {
-                currentResolveList = mOrigResolveList = mBaseResolveList;
+                currentResolveList = mOrigResolveList = new ArrayList<>();
+                addResolveListDedupe(currentResolveList, getTargetIntent(), mBaseResolveList);
             } else {
-                currentResolveList = mOrigResolveList = mPm.queryIntentActivities(
-                        mIntent, PackageManager.MATCH_DEFAULT_ONLY
-                        | (mFilterLastUsed ? PackageManager.GET_RESOLVED_FILTER : 0));
+                final boolean shouldGetResolvedFilter = shouldGetResolvedFilter();
+                final boolean shouldGetActivityMetadata = shouldGetActivityMetadata();
+                for (int i = 0, N = mIntents.size(); i < N; i++) {
+                    final Intent intent = mIntents.get(i);
+                    final List<ResolveInfo> infos = mPm.queryIntentActivities(intent,
+                            PackageManager.MATCH_DEFAULT_ONLY
+                            | (shouldGetResolvedFilter ? PackageManager.GET_RESOLVED_FILTER : 0)
+                            | (shouldGetActivityMetadata ? PackageManager.GET_META_DATA : 0));
+                    if (infos != null) {
+                        if (currentResolveList == null) {
+                            currentResolveList = mOrigResolveList = new ArrayList<>();
+                        }
+                        addResolveListDedupe(currentResolveList, intent, infos);
+                    }
+                }
+
                 // Filter out any activities that the launched uid does not
                 // have permission for.  We don't do this when we have an explicit
                 // list of resolved activities, because that only happens when
@@ -855,14 +1250,15 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                 // they gave us.
                 if (currentResolveList != null) {
                     for (int i=currentResolveList.size()-1; i >= 0; i--) {
-                        ActivityInfo ai = currentResolveList.get(i).activityInfo;
+                        ActivityInfo ai = currentResolveList.get(i)
+                                .getResolveInfoAt(0).activityInfo;
                         int granted = ActivityManager.checkComponentPermission(
                                 ai.permission, mLaunchedFromUid,
                                 ai.applicationInfo.uid, ai.exported);
                         if (granted != PackageManager.PERMISSION_GRANTED) {
                             // Access not allowed!
                             if (mOrigResolveList == currentResolveList) {
-                                mOrigResolveList = new ArrayList<ResolveInfo>(mOrigResolveList);
+                                mOrigResolveList = new ArrayList<>(mOrigResolveList);
                             }
                             currentResolveList.remove(i);
                         }
@@ -873,9 +1269,10 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
             if ((currentResolveList != null) && ((N = currentResolveList.size()) > 0)) {
                 // Only display the first matches that are either of equal
                 // priority or have asked to be default options.
-                ResolveInfo r0 = currentResolveList.get(0);
+                ResolvedComponentInfo rci0 = currentResolveList.get(0);
+                ResolveInfo r0 = rci0.getResolveInfoAt(0);
                 for (int i=1; i<N; i++) {
-                    ResolveInfo ri = currentResolveList.get(i);
+                    ResolveInfo ri = currentResolveList.get(i).getResolveInfoAt(0);
                     if (DEBUG) Log.v(
                         TAG,
                         r0.activityInfo.name + "=" +
@@ -886,7 +1283,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                         r0.isDefault != ri.isDefault) {
                         while (i < N) {
                             if (mOrigResolveList == currentResolveList) {
-                                mOrigResolveList = new ArrayList<ResolveInfo>(mOrigResolveList);
+                                mOrigResolveList = new ArrayList<>(mOrigResolveList);
                             }
                             currentResolveList.remove(i);
                             N--;
@@ -894,9 +1291,8 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                     }
                 }
                 if (N > 1) {
-                    Comparator<ResolveInfo> rComparator =
-                            new ResolverComparator(ResolverActivity.this, mIntent);
-                    Collections.sort(currentResolveList, rComparator);
+                    mResolverComparator.compute(currentResolveList);
+                    Collections.sort(currentResolveList, mResolverComparator);
                 }
                 // First put the initial items at the top.
                 if (mInitialIntents != null) {
@@ -915,32 +1311,36 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                         ri.activityInfo = ai;
                         UserManager userManager =
                                 (UserManager) getSystemService(Context.USER_SERVICE);
-                        if (userManager.isManagedProfile()) {
-                            ri.noResourceId = true;
-                        }
                         if (ii instanceof LabeledIntent) {
                             LabeledIntent li = (LabeledIntent)ii;
                             ri.resolvePackageName = li.getSourcePackage();
                             ri.labelRes = li.getLabelResource();
                             ri.nonLocalizedLabel = li.getNonLocalizedLabel();
                             ri.icon = li.getIconResource();
+                            ri.iconResourceId = ri.icon;
                         }
-                        addResolveInfo(new DisplayResolveInfo(ri,
+                        if (userManager.isManagedProfile()) {
+                            ri.noResourceId = true;
+                            ri.icon = 0;
+                        }
+                        addResolveInfo(new DisplayResolveInfo(ii, ri,
                                 ri.loadLabel(getPackageManager()), null, ii));
                     }
                 }
 
                 // Check for applications with same name and use application name or
                 // package name if necessary
-                r0 = currentResolveList.get(0);
+                rci0 = currentResolveList.get(0);
+                r0 = rci0.getResolveInfoAt(0);
                 int start = 0;
                 CharSequence r0Label =  r0.loadLabel(mPm);
-                mShowExtended = false;
+                mHasExtendedInfo = false;
                 for (int i = 1; i < N; i++) {
                     if (r0Label == null) {
                         r0Label = r0.activityInfo.packageName;
                     }
-                    ResolveInfo ri = currentResolveList.get(i);
+                    ResolvedComponentInfo rci = currentResolveList.get(i);
+                    ResolveInfo ri = rci.getResolveInfoAt(0);
                     CharSequence riLabel = ri.loadLabel(mPm);
                     if (riLabel == null) {
                         riLabel = ri.activityInfo.packageName;
@@ -948,13 +1348,14 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                     if (riLabel.equals(r0Label)) {
                         continue;
                     }
-                    processGroup(currentResolveList, start, (i-1), r0, r0Label);
+                    processGroup(currentResolveList, start, (i-1), rci0, r0Label);
+                    rci0 = rci;
                     r0 = ri;
                     r0Label = riLabel;
                     start = i;
                 }
                 // Process last group
-                processGroup(currentResolveList, start, (N-1), r0, r0Label);
+                processGroup(currentResolveList, start, (N-1), rci0, r0Label);
             }
 
             // Layout doesn't handle both profile button and last chosen
@@ -963,20 +1364,60 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                 mLastChosenPosition = -1;
                 mFilterLastUsed = false;
             }
+
+            onListRebuilt();
         }
 
-        private void processGroup(List<ResolveInfo> rList, int start, int end, ResolveInfo ro,
-                CharSequence roLabel) {
+        private void addResolveListDedupe(List<ResolvedComponentInfo> into, Intent intent,
+                List<ResolveInfo> from) {
+            final int fromCount = from.size();
+            final int intoCount = into.size();
+            for (int i = 0; i < fromCount; i++) {
+                final ResolveInfo newInfo = from.get(i);
+                boolean found = false;
+                // Only loop to the end of into as it was before we started; no dupes in from.
+                for (int j = 0; j < intoCount; j++) {
+                    final ResolvedComponentInfo rci = into.get(i);
+                    if (isSameResolvedComponent(newInfo, rci)) {
+                        found = true;
+                        rci.add(intent, newInfo);
+                        break;
+                    }
+                }
+                if (!found) {
+                    into.add(new ResolvedComponentInfo(new ComponentName(
+                            newInfo.activityInfo.packageName, newInfo.activityInfo.name),
+                            intent, newInfo));
+                }
+            }
+        }
+
+        private boolean isSameResolvedComponent(ResolveInfo a, ResolvedComponentInfo b) {
+            final ActivityInfo ai = a.activityInfo;
+            return ai.packageName.equals(b.name.getPackageName())
+                    && ai.name.equals(b.name.getClassName());
+        }
+
+        public void onListRebuilt() {
+            // This space for rent
+        }
+
+        public boolean shouldGetResolvedFilter() {
+            return mFilterLastUsed;
+        }
+
+        private void processGroup(List<ResolvedComponentInfo> rList, int start, int end,
+                ResolvedComponentInfo ro, CharSequence roLabel) {
             // Process labels from start to i
             int num = end - start+1;
             if (num == 1) {
                 // No duplicate labels. Use label for entry at start
-                addResolveInfo(new DisplayResolveInfo(ro, roLabel, null, null));
-                updateLastChosenPosition(ro);
+                addResolveInfoWithAlternates(ro, null, roLabel);
             } else {
-                mShowExtended = true;
+                mHasExtendedInfo = true;
                 boolean usePkg = false;
-                CharSequence startApp = ro.activityInfo.applicationInfo.loadLabel(mPm);
+                final ApplicationInfo ai = ro.getResolveInfoAt(0).activityInfo.applicationInfo;
+                final CharSequence startApp = ai.loadLabel(mPm);
                 if (startApp == null) {
                     usePkg = true;
                 }
@@ -986,7 +1427,7 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                         new HashSet<CharSequence>();
                     duplicates.add(startApp);
                     for (int j = start+1; j <= end ; j++) {
-                        ResolveInfo jRi = rList.get(j);
+                        ResolveInfo jRi = rList.get(j).getResolveInfoAt(0);
                         CharSequence jApp = jRi.activityInfo.applicationInfo.loadLabel(mPm);
                         if ( (jApp == null) || (duplicates.contains(jApp))) {
                             usePkg = true;
@@ -999,93 +1440,223 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                     duplicates.clear();
                 }
                 for (int k = start; k <= end; k++) {
-                    ResolveInfo add = rList.get(k);
+                    final ResolvedComponentInfo rci = rList.get(k);
+                    final ResolveInfo add = rci.getResolveInfoAt(0);
+                    final CharSequence extraInfo;
                     if (usePkg) {
-                        // Use application name for all entries from start to end-1
-                        addResolveInfo(new DisplayResolveInfo(add, roLabel,
-                                add.activityInfo.packageName, null));
-                    } else {
                         // Use package name for all entries from start to end-1
-                        addResolveInfo(new DisplayResolveInfo(add, roLabel,
-                                add.activityInfo.applicationInfo.loadLabel(mPm), null));
+                        extraInfo = add.activityInfo.packageName;
+                    } else {
+                        // Use application name for all entries from start to end-1
+                        extraInfo = add.activityInfo.applicationInfo.loadLabel(mPm);
                     }
-                    updateLastChosenPosition(add);
+                    addResolveInfoWithAlternates(rci, extraInfo, roLabel);
                 }
             }
+        }
+
+        private void addResolveInfoWithAlternates(ResolvedComponentInfo rci,
+                CharSequence extraInfo, CharSequence roLabel) {
+            final int count = rci.getCount();
+            final Intent intent = rci.getIntentAt(0);
+            final ResolveInfo add = rci.getResolveInfoAt(0);
+            final Intent replaceIntent = getReplacementIntent(add.activityInfo, intent);
+            final DisplayResolveInfo dri = new DisplayResolveInfo(intent, add, roLabel,
+                    extraInfo, replaceIntent);
+            addResolveInfo(dri);
+            if (replaceIntent == intent) {
+                // Only add alternates if we didn't get a specific replacement from
+                // the caller. If we have one it trumps potential alternates.
+                for (int i = 1, N = count; i < N; i++) {
+                    final Intent altIntent = rci.getIntentAt(i);
+                    dri.addAlternateSourceIntent(altIntent);
+                }
+            }
+            updateLastChosenPosition(add);
         }
 
         private void updateLastChosenPosition(ResolveInfo info) {
             if (mLastChosen != null
                     && mLastChosen.activityInfo.packageName.equals(info.activityInfo.packageName)
                     && mLastChosen.activityInfo.name.equals(info.activityInfo.name)) {
-                mLastChosenPosition = mList.size() - 1;
+                mLastChosenPosition = mDisplayList.size() - 1;
             }
         }
 
         private void addResolveInfo(DisplayResolveInfo dri) {
-            if (dri.ri.targetUserId != UserHandle.USER_CURRENT && mOtherProfile == null) {
+            if (dri.mResolveInfo.targetUserId != UserHandle.USER_CURRENT && mOtherProfile == null) {
                 // So far we only support a single other profile at a time.
                 // The first one we see gets special treatment.
                 mOtherProfile = dri;
             } else {
-                mList.add(dri);
+                mDisplayList.add(dri);
             }
         }
 
         public ResolveInfo resolveInfoForPosition(int position, boolean filtered) {
-            return (filtered ? getItem(position) : mList.get(position)).ri;
+            return (filtered ? getItem(position) : mDisplayList.get(position))
+                    .getResolveInfo();
         }
 
-        public Intent intentForPosition(int position, boolean filtered) {
-            DisplayResolveInfo dri = filtered ? getItem(position) : mList.get(position);
-            return intentForDisplayResolveInfo(dri);
+        public TargetInfo targetInfoForPosition(int position, boolean filtered) {
+            return filtered ? getItem(position) : mDisplayList.get(position);
         }
 
         public int getCount() {
-            int result = mList.size();
+            int result = mDisplayList.size();
             if (mFilterLastUsed && mLastChosenPosition >= 0) {
                 result--;
             }
             return result;
         }
 
-        public DisplayResolveInfo getItem(int position) {
+        public int getUnfilteredCount() {
+            return mDisplayList.size();
+        }
+
+        public int getDisplayInfoCount() {
+            return mDisplayList.size();
+        }
+
+        public DisplayResolveInfo getDisplayInfoAt(int index) {
+            return mDisplayList.get(index);
+        }
+
+        public TargetInfo getItem(int position) {
             if (mFilterLastUsed && mLastChosenPosition >= 0 && position >= mLastChosenPosition) {
                 position++;
             }
-            return mList.get(position);
+            return mDisplayList.get(position);
         }
 
         public long getItemId(int position) {
             return position;
         }
 
-        public View getView(int position, View convertView, ViewGroup parent) {
+        public boolean hasExtendedInfo() {
+            return mHasExtendedInfo;
+        }
+
+        public boolean hasResolvedTarget(ResolveInfo info) {
+            for (int i = 0, N = mDisplayList.size(); i < N; i++) {
+                if (resolveInfoMatch(info, mDisplayList.get(i).getResolveInfo())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        protected int getDisplayResolveInfoCount() {
+            return mDisplayList.size();
+        }
+
+        protected DisplayResolveInfo getDisplayResolveInfo(int index) {
+            // Used to query services. We only query services for primary targets, not alternates.
+            return mDisplayList.get(index);
+        }
+
+        public final View getView(int position, View convertView, ViewGroup parent) {
             View view = convertView;
             if (view == null) {
-                view = mInflater.inflate(
-                        com.android.internal.R.layout.resolve_list_item, parent, false);
-
-                final ViewHolder holder = new ViewHolder(view);
-                view.setTag(holder);
+                view = createView(parent);
             }
-            bindView(view, getItem(position));
+            onBindView(view, getItem(position));
             return view;
         }
 
-        private final void bindView(View view, DisplayResolveInfo info) {
+        public final View createView(ViewGroup parent) {
+            final View view = onCreateView(parent);
+            final ViewHolder holder = new ViewHolder(view);
+            view.setTag(holder);
+            return view;
+        }
+
+        public View onCreateView(ViewGroup parent) {
+            return mInflater.inflate(
+                    com.android.internal.R.layout.resolve_list_item, parent, false);
+        }
+
+        public boolean showsExtendedInfo(TargetInfo info) {
+            return !TextUtils.isEmpty(info.getExtendedInfo());
+        }
+
+        public final void bindView(int position, View view) {
+            onBindView(view, getItem(position));
+        }
+
+        private void onBindView(View view, TargetInfo info) {
             final ViewHolder holder = (ViewHolder) view.getTag();
-            holder.text.setText(info.displayLabel);
-            if (mShowExtended) {
+            final CharSequence label = info.getDisplayLabel();
+            if (!TextUtils.equals(holder.text.getText(), label)) {
+                holder.text.setText(info.getDisplayLabel());
+            }
+            if (showsExtendedInfo(info)) {
                 holder.text2.setVisibility(View.VISIBLE);
-                holder.text2.setText(info.extendedInfo);
+                holder.text2.setText(info.getExtendedInfo());
             } else {
                 holder.text2.setVisibility(View.GONE);
             }
-            if (info.displayIcon == null) {
-                new LoadIconTask().execute(info);
+            if (info instanceof DisplayResolveInfo
+                    && !((DisplayResolveInfo) info).hasDisplayIcon()) {
+                new LoadAdapterIconTask((DisplayResolveInfo) info).execute();
             }
-            holder.icon.setImageDrawable(info.displayIcon);
+            holder.icon.setImageDrawable(info.getDisplayIcon());
+            if (holder.badge != null) {
+                final Drawable badge = info.getBadgeIcon();
+                if (badge != null) {
+                    holder.badge.setImageDrawable(badge);
+                    holder.badge.setContentDescription(info.getBadgeContentDescription());
+                    holder.badge.setVisibility(View.VISIBLE);
+                } else {
+                    holder.badge.setVisibility(View.GONE);
+                }
+            }
+        }
+    }
+
+    static final class ResolvedComponentInfo {
+        public final ComponentName name;
+        private final List<Intent> mIntents = new ArrayList<>();
+        private final List<ResolveInfo> mResolveInfos = new ArrayList<>();
+
+        public ResolvedComponentInfo(ComponentName name, Intent intent, ResolveInfo info) {
+            this.name = name;
+            add(intent, info);
+        }
+
+        public void add(Intent intent, ResolveInfo info) {
+            mIntents.add(intent);
+            mResolveInfos.add(info);
+        }
+
+        public int getCount() {
+            return mIntents.size();
+        }
+
+        public Intent getIntentAt(int index) {
+            return index >= 0 ? mIntents.get(index) : null;
+        }
+
+        public ResolveInfo getResolveInfoAt(int index) {
+            return index >= 0 ? mResolveInfos.get(index) : null;
+        }
+
+        public int findIntent(Intent intent) {
+            for (int i = 0, N = mIntents.size(); i < N; i++) {
+                if (intent.equals(mIntents.get(i))) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        public int findResolveInfo(ResolveInfo info) {
+            for (int i = 0, N = mResolveInfos.size(); i < N; i++) {
+                if (info.equals(mResolveInfos.get(i))) {
+                    return i;
+                }
+            }
+            return -1;
         }
     }
 
@@ -1093,19 +1664,48 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
         public TextView text;
         public TextView text2;
         public ImageView icon;
+        public ImageView badge;
 
         public ViewHolder(View view) {
             text = (TextView) view.findViewById(com.android.internal.R.id.text1);
             text2 = (TextView) view.findViewById(com.android.internal.R.id.text2);
             icon = (ImageView) view.findViewById(R.id.icon);
+            badge = (ImageView) view.findViewById(R.id.target_badge);
         }
     }
 
-    class ItemLongClickListener implements AdapterView.OnItemLongClickListener {
+    class ItemClickListener implements AdapterView.OnItemClickListener,
+            AdapterView.OnItemLongClickListener {
+        @Override
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            final ListView listView = parent instanceof ListView ? (ListView) parent : null;
+            if (listView != null) {
+                position -= listView.getHeaderViewsCount();
+            }
+            if (position < 0) {
+                // Header views don't count.
+                return;
+            }
+            final int checkedPos = mAdapterView.getCheckedItemPosition();
+            final boolean hasValidSelection = checkedPos != ListView.INVALID_POSITION;
+            if (mAlwaysUseOption && (!hasValidSelection || mLastSelected != checkedPos)) {
+                setAlwaysButtonEnabled(hasValidSelection, checkedPos, true);
+                mOnceButton.setEnabled(hasValidSelection);
+                if (hasValidSelection) {
+                    mAdapterView.smoothScrollToPosition(checkedPos);
+                }
+                mLastSelected = checkedPos;
+            } else {
+                startSelected(position, false, true);
+            }
+        }
 
         @Override
         public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-            position -= mListView.getHeaderViewsCount();
+            final ListView listView = parent instanceof ListView ? (ListView) parent : null;
+            if (listView != null) {
+                position -= listView.getHeaderViewsCount();
+            }
             if (position < 0) {
                 // Header views don't count.
                 return false;
@@ -1117,44 +1717,53 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
 
     }
 
-    class LoadIconTask extends AsyncTask<DisplayResolveInfo, Void, DisplayResolveInfo> {
-        @Override
-        protected DisplayResolveInfo doInBackground(DisplayResolveInfo... params) {
-            final DisplayResolveInfo info = params[0];
-            if (info.displayIcon == null) {
-                info.displayIcon = loadIconForResolveInfo(info.ri);
-            }
-            return info;
+    abstract class LoadIconTask extends AsyncTask<Void, Void, Drawable> {
+        protected final DisplayResolveInfo mDisplayResolveInfo;
+        private final ResolveInfo mResolveInfo;
+
+        public LoadIconTask(DisplayResolveInfo dri) {
+            mDisplayResolveInfo = dri;
+            mResolveInfo = dri.getResolveInfo();
         }
 
         @Override
-        protected void onPostExecute(DisplayResolveInfo info) {
-            if (mProfileView != null && mAdapter.getOtherProfile() == info) {
+        protected Drawable doInBackground(Void... params) {
+            return loadIconForResolveInfo(mResolveInfo);
+        }
+
+        @Override
+        protected void onPostExecute(Drawable d) {
+            mDisplayResolveInfo.setDisplayIcon(d);
+        }
+    }
+
+    class LoadAdapterIconTask extends LoadIconTask {
+        public LoadAdapterIconTask(DisplayResolveInfo dri) {
+            super(dri);
+        }
+
+        @Override
+        protected void onPostExecute(Drawable d) {
+            super.onPostExecute(d);
+            if (mProfileView != null && mAdapter.getOtherProfile() == mDisplayResolveInfo) {
                 bindProfileView();
             }
             mAdapter.notifyDataSetChanged();
         }
     }
 
-    class LoadIconIntoViewTask extends AsyncTask<DisplayResolveInfo, Void, DisplayResolveInfo> {
-        final ImageView mTargetView;
+    class LoadIconIntoViewTask extends LoadIconTask {
+        private final ImageView mTargetView;
 
-        public LoadIconIntoViewTask(ImageView target) {
+        public LoadIconIntoViewTask(DisplayResolveInfo dri, ImageView target) {
+            super(dri);
             mTargetView = target;
         }
 
         @Override
-        protected DisplayResolveInfo doInBackground(DisplayResolveInfo... params) {
-            final DisplayResolveInfo info = params[0];
-            if (info.displayIcon == null) {
-                info.displayIcon = loadIconForResolveInfo(info.ri);
-            }
-            return info;
-        }
-
-        @Override
-        protected void onPostExecute(DisplayResolveInfo info) {
-            mTargetView.setImageDrawable(info.displayIcon);
+        protected void onPostExecute(Drawable d) {
+            super.onPostExecute(d);
+            mTargetView.setImageDrawable(d);
         }
     }
 
@@ -1164,61 +1773,39 @@ public class ResolverActivity extends Activity implements AdapterView.OnItemClic
                 && match <= IntentFilter.MATCH_CATEGORY_PATH;
     }
 
-    class ResolverComparator implements Comparator<ResolveInfo> {
-        private final Collator mCollator;
-        private final boolean mHttp;
-
-        public ResolverComparator(Context context, Intent intent) {
-            mCollator = Collator.getInstance(context.getResources().getConfiguration().locale);
-            String scheme = intent.getScheme();
-            mHttp = "http".equals(scheme) || "https".equals(scheme);
+    static class PickTargetOptionRequest extends PickOptionRequest {
+        public PickTargetOptionRequest(@Nullable Prompt prompt, Option[] options,
+                @Nullable Bundle extras) {
+            super(prompt, options, extras);
         }
 
         @Override
-        public int compare(ResolveInfo lhs, ResolveInfo rhs) {
-            // We want to put the one targeted to another user at the end of the dialog.
-            if (lhs.targetUserId != UserHandle.USER_CURRENT) {
-                return 1;
+        public void onCancel() {
+            super.onCancel();
+            final ResolverActivity ra = (ResolverActivity) getActivity();
+            if (ra != null) {
+                ra.mPickOptionRequest = null;
+                ra.finish();
             }
-
-            if (mHttp) {
-                // Special case: we want filters that match URI paths/schemes to be
-                // ordered before others.  This is for the case when opening URIs,
-                // to make native apps go above browsers.
-                final boolean lhsSpecific = isSpecificUriMatch(lhs.match);
-                final boolean rhsSpecific = isSpecificUriMatch(rhs.match);
-                if (lhsSpecific != rhsSpecific) {
-                    return lhsSpecific ? -1 : 1;
-                }
-            }
-
-            if (mStats != null) {
-                final long timeDiff =
-                        getPackageTimeSpent(rhs.activityInfo.packageName) -
-                        getPackageTimeSpent(lhs.activityInfo.packageName);
-
-                if (timeDiff != 0) {
-                    return timeDiff > 0 ? 1 : -1;
-                }
-            }
-
-            CharSequence  sa = lhs.loadLabel(mPm);
-            if (sa == null) sa = lhs.activityInfo.name;
-            CharSequence  sb = rhs.loadLabel(mPm);
-            if (sb == null) sb = rhs.activityInfo.name;
-
-            return mCollator.compare(sa.toString(), sb.toString());
         }
 
-        private long getPackageTimeSpent(String packageName) {
-            if (mStats != null) {
-                final UsageStats stats = mStats.get(packageName);
-                if (stats != null) {
-                    return stats.getTotalTimeInForeground();
-                }
-
+        @Override
+        public void onPickOptionResult(boolean finished, Option[] selections, Bundle result) {
+            super.onPickOptionResult(finished, selections, result);
+            if (selections.length != 1) {
+                // TODO In a better world we would filter the UI presented here and let the
+                // user refine. Maybe later.
+                return;
             }
-            return 0;
+
+            final ResolverActivity ra = (ResolverActivity) getActivity();
+            if (ra != null) {
+                final TargetInfo ti = ra.mAdapter.getItem(selections[0].getIndex());
+                if (ra.onTargetSelected(ti, false)) {
+                    ra.mPickOptionRequest = null;
+                    ra.finish();
+                }
+            }
         }
     }
 }
