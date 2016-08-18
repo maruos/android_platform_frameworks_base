@@ -55,7 +55,7 @@ public:
         if (proxy != NULL) {
             // listen for remote death
             mDeathRecipient = new MDeathRecipient(*const_cast<PerspectiveClient*>(this));
-            mProxy->asBinder()->linkToDeath(mDeathRecipient);
+            IInterface::asBinder(mProxy)->linkToDeath(mDeathRecipient);
         }
     }
 
