@@ -63,6 +63,8 @@ import android.media.projection.MediaProjectionManager;
 import android.media.session.MediaSessionManager;
 import android.media.tv.ITvInputManager;
 import android.media.tv.TvInputManager;
+import android.mperspective.IPerspectiveService;
+import android.mperspective.PerspectiveManager;
 import android.net.ConnectivityManager;
 import android.net.EthernetManager;
 import android.net.IConnectivityManager;
@@ -455,6 +457,14 @@ final class SystemServiceRegistry {
             public SerialManager createService(ContextImpl ctx) {
                 IBinder b = ServiceManager.getService(Context.SERIAL_SERVICE);
                 return new SerialManager(ctx, ISerialManager.Stub.asInterface(b));
+            }});
+
+        registerService(Context.PERSPECTIVE_SERVICE, PerspectiveManager.class,
+                new CachedServiceFetcher<PerspectiveManager>() {
+            @Override
+            public PerspectiveManager createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(Context.PERSPECTIVE_SERVICE);
+                return new PerspectiveManager(IPerspectiveService.Stub.asInterface(b));
             }});
 
         registerService(Context.VIBRATOR_SERVICE, Vibrator.class,
