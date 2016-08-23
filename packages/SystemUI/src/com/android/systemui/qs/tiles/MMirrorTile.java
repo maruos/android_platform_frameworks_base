@@ -22,6 +22,7 @@ import android.hardware.display.DisplayManager;
 import android.util.Log;
 import android.view.Display;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 
@@ -79,6 +80,11 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
         } else {
             return mContext.getString(R.string.accessibility_qs_mirroring_changed_off);
         }
+    }
+
+    @Override
+    public int getMetricsCategory() {
+        return MetricsLogger.QS_MMIRROR_TOGGLE;
     }
 
     @Override
