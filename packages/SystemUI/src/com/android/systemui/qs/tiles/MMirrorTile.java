@@ -18,10 +18,12 @@
 package com.android.systemui.qs.tiles;
 
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.display.DisplayManager;
 import android.util.Log;
 import android.view.Display;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 
@@ -49,7 +51,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     }
 
     @Override
-    protected BooleanState newTileState() {
+    public BooleanState newTileState() {
         return new BooleanState();
     }
 
@@ -66,7 +68,6 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         final boolean hasHdmiDisplay = mHdmiDisplayId != -1;
-        state.visible = hasHdmiDisplay;
         state.value = mDisplayManager.isHdmiMirroringEnabled();
         state.label = mContext.getString(R.string.quick_settings_mirroring_mode_label);
         state.icon = ResourceIcon.get(state.value ? mEnabledIcon : mDisabledIcon);
@@ -79,6 +80,21 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
         } else {
             return mContext.getString(R.string.accessibility_qs_mirroring_changed_off);
         }
+    }
+
+    @Override
+    public int getMetricsCategory() {
+        return MetricsLogger.QS_MMIRROR_TOGGLE;
+    }
+
+    @Override
+    public Intent getLongClickIntent() {
+        return null;
+    }
+
+    @Override
+    public CharSequence getTileLabel() {
+        return mContext.getString(R.string.quick_settings_mirroring_mode_label);
     }
 
     @Override
