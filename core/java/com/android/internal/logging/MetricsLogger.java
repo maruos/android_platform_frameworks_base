@@ -31,6 +31,9 @@ public class MetricsLogger {
 
     public static final int VIEW_UNKNOWN = MetricsEvent.VIEW_UNKNOWN;
 
+    public static final int QS_MMIRROR_TOGGLE = 1000;
+    public static final int QS_MDESKTOP_TOGGLE = 1001;
+
     public static void visible(Context context, int category) throws IllegalArgumentException {
         if (Build.IS_DEBUGGABLE && category == VIEW_UNKNOWN) {
             throw new IllegalArgumentException("Must define metric category");
