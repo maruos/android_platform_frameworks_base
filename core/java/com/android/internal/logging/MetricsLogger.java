@@ -49,6 +49,7 @@ public class MetricsLogger implements MetricsConstants {
 
     public static final int QS_MMIRROR_TOGGLE = 1000;
     public static final int QS_MDESKTOP_TOGGLE = 1001;
+    public static final int MDESKTOP_TWEAKS = 1002;
 
     public static void visible(Context context, int category) throws IllegalArgumentException {
         if (Build.IS_DEBUGGABLE && category == VIEW_UNKNOWN) {

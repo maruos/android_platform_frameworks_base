@@ -424,7 +424,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                      *
                      * Debug hook to toggle maru changes.
                      */
-                    if (SystemProperties.getBoolean("persist.maru.desktop.hdmi", true)) {
+                    if (SystemProperties.getBoolean("persist.m.desktop.hdmi", true)) {
                         /* HDMI displays are the default external display */
                         mInfo.flags |= DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY;
                     }
