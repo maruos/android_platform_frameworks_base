@@ -424,6 +424,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public void setLockPattern(String pattern, String savedCredential, int userId)
             throws RemoteException {
+        checkWritePermission(userId);
         byte[] currentHandle = getCurrentHandle(userId);
 
         if (pattern == null) {
@@ -452,6 +453,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public void setLockPassword(String password, String savedCredential, int userId)
             throws RemoteException {
+        checkWritePermission(userId);
         byte[] currentHandle = getCurrentHandle(userId);
 
         if (password == null) {
@@ -517,6 +519,9 @@ public class LockSettingsService extends ILockSettings.Stub {
     private VerifyCredentialResponse doVerifyPattern(String pattern, boolean hasChallenge,
             long challenge, int userId) throws RemoteException {
        checkPasswordReadPermission(userId);
+       if (TextUtils.isEmpty(pattern)) {
+           throw new IllegalArgumentException("Pattern can't be null or empty");
+       }
        CredentialHash storedHash = mStorage.readPatternHash(userId);
        boolean shouldReEnrollBaseZero = storedHash != null && storedHash.isBaseZeroPattern;
 
@@ -573,6 +578,9 @@ public class LockSettingsService extends ILockSettings.Stub {
     private VerifyCredentialResponse doVerifyPassword(String password, boolean hasChallenge,
             long challenge, int userId) throws RemoteException {
        checkPasswordReadPermission(userId);
+       if (TextUtils.isEmpty(password)) {
+           throw new IllegalArgumentException("Password can't be null or empty");
+       }
        CredentialHash storedHash = mStorage.readPasswordHash(userId);
        return verifyCredential(userId, storedHash, password, hasChallenge, challenge,
                new CredentialUtil() {
