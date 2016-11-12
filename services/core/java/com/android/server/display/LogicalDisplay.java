@@ -275,11 +275,14 @@ final class LogicalDisplay {
      *
      * @param device The display device to modify.
      * @param isBlanked True if the device is being blanked.
+     * @param layerStackOverride The layerstack to associate the device with, or
+     *                           < 0 to use the primary display device's layerstack
      */
     public void configureDisplayInTransactionLocked(DisplayDevice device,
-            boolean isBlanked) {
+            boolean isBlanked, int layerStackOverride) {
         // Set the layer stack.
-        device.setLayerStackInTransactionLocked(isBlanked ? BLANK_LAYER_STACK : mLayerStack);
+        int layerStack = layerStackOverride < 0 ? mLayerStack : layerStackOverride;
+        device.setLayerStackInTransactionLocked(isBlanked ? BLANK_LAYER_STACK : layerStack);
 
         // Set the color transform and mode.
         if (device == mPrimaryDisplayDevice) {
@@ -350,6 +353,17 @@ final class LogicalDisplay {
         mTempDisplayRect.top += mDisplayOffsetY;
         mTempDisplayRect.bottom += mDisplayOffsetY;
         device.setProjectionInTransactionLocked(orientation, mTempLayerStackRect, mTempDisplayRect);
+    }
+
+    /**
+     * Stock method signature that uses the associated physical display's layer stack as usual.
+     *
+     * @param device
+     * @param isBlanked
+     */
+    public void configureDisplayInTransactionLocked(DisplayDevice device,
+            boolean isBlanked) {
+        configureDisplayInTransactionLocked(device, isBlanked, -1);
     }
 
     /**

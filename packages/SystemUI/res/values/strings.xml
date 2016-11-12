@@ -1141,12 +1141,12 @@
     <!-- Maru -->
 
     <!-- QuickSettings: MMirror [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_mirroring_mode_label">Mirror screen</string>
+    <string name="quick_settings_mirroring_mode_label">Mirror phone</string>
 
     <!-- Announcement made when mirroring changes to disabled (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_qs_mirroring_changed_off">Screen mirroring turned off.</string>
+    <string name="accessibility_qs_mirroring_changed_off">Phone mirroring turned off.</string>
     <!-- Announcement made when mirroring changes to enabled (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_qs_mirroring_changed_on">Screen mirroring turned on.</string>
+    <string name="accessibility_qs_mirroring_changed_on">Phone mirroring turned on.</string>
 
     <!-- QuickSettings: MDesktop [CHAR LIMIT=NONE] -->
     <string name="quick_settings_mdesktop_mode_label">Desktop</string>

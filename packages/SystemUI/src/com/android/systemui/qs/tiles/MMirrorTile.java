@@ -26,7 +26,10 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.R;
 import com.android.systemui.qs.QSTile;
 
-/** Quick settings tile: Mirror screen **/
+import java.util.HashSet;
+import java.util.Set;
+
+/** Quick settings tile: Mirror phone **/
 public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     private static final String TAG = "MMirrorTile";
 
@@ -36,8 +39,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     private final DisplayManager mDisplayManager;
 
     private final MDisplayListener mDisplayListener;
-    // track the hdmi display id to check if it has been removed later
-    private int mHdmiDisplayId = -1;
+    private Set<Integer> mPresentationDisplays;
     private boolean mListening = false;
 
     public MMirrorTile(Host host) {
@@ -47,6 +49,7 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
                 .getSystemService(Context.DISPLAY_SERVICE);
 
         mDisplayListener = new MDisplayListener();
+        mPresentationDisplays = new HashSet<Integer>();
     }
 
     @Override
@@ -57,18 +60,18 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     @Override
     public void handleClick() {
         if (mState.value) {
-            mDisplayManager.disableHdmiMirroring();
+            mDisplayManager.disablePhoneMirroring();
         } else {
-            mDisplayManager.enableHdmiMirroring();
+            mDisplayManager.enablePhoneMirroring();
         }
         refreshState();
     }
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
-        final boolean hasHdmiDisplay = mHdmiDisplayId != -1;
-        state.visible = hasHdmiDisplay;
-        state.value = mDisplayManager.isHdmiMirroringEnabled();
+        final boolean hasPresentationDisplay = !mPresentationDisplays.isEmpty();
+        state.visible = hasPresentationDisplay;
+        state.value = mDisplayManager.isPhoneMirroringEnabled();
         state.label = mContext.getString(R.string.quick_settings_mirroring_mode_label);
         state.icon = ResourceIcon.get(state.value ? mEnabledIcon : mDisabledIcon);
     }
@@ -106,27 +109,29 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
     }
 
     private class MDisplayListener implements DisplayManager.DisplayListener {
+        /**
+         * Keep track of public presentation displays. These are displays that will show either
+         * Maru Desktop or the mirrored phone screen.
+         */
+
         @Override
         public void onDisplayAdded(int displayId) {
             Display display = mDisplayManager.getDisplay(displayId);
-            // Log.d(TAG, "Display added: " + display);
-            final boolean hdmiDisplayAdded = display.getType() == Display.TYPE_HDMI;
 
-            if (hdmiDisplayAdded) {
-                if (mHdmiDisplayId == -1) {
-                    mHdmiDisplayId = displayId;
+            if (display.isPublicPresentation()) {
+                if (mPresentationDisplays.isEmpty()) {
+                    // the first presentation display was added
                     refreshState();
                 }
+                mPresentationDisplays.add(displayId);
             }
         }
 
         @Override
         public void onDisplayRemoved(int displayId) {
-            if (displayId == mHdmiDisplayId) {
-                if (mHdmiDisplayId != -1) {
-                    mHdmiDisplayId = -1;
-                    refreshState();
-                }
+            if (mPresentationDisplays.remove(displayId) && mPresentationDisplays.isEmpty()) {
+                // the last presentation display was removed
+                refreshState();
             }
         }
 
@@ -141,13 +146,12 @@ public class MMirrorTile extends QSTile<QSTile.BooleanState> {
          * state is up-to-date.
          */
         public void sync() {
-            mHdmiDisplayId = -1;
+            mPresentationDisplays.clear();
             Display[] displays = mDisplayManager
                     .getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
             for (Display display : displays) {
-                if (display.getType() == Display.TYPE_HDMI) {
-                    mHdmiDisplayId = display.getDisplayId();
-                    break;
+                if (display.isPublicPresentation()) {
+                    mPresentationDisplays.add(display.getDisplayId());
                 }
             }
         }

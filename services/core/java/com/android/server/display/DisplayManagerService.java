@@ -155,7 +155,7 @@ public final class DisplayManagerService extends SystemService {
     /**
      * maru
      */
-    private boolean mHdmiMirroringEnabled;
+    private boolean mPhoneMirroringEnabled;
 
     // True if the display manager service should pretend there is only one display
     // and only tell applications about the existence of the default logical display.
@@ -177,7 +177,7 @@ public final class DisplayManagerService extends SystemService {
     // List of all logical displays indexed by logical display id.
     private final SparseArray<LogicalDisplay> mLogicalDisplays =
             new SparseArray<LogicalDisplay>();
-    private int mNextNonDefaultDisplayId = Display.DEFAULT_EXTERNAL_DISPLAY + 1;
+    private int mNextNonDefaultDisplayId = Display.DEFAULT_DESKTOP_DISPLAY + 1;
 
     // List of all display transaction listeners.
     private final CopyOnWriteArrayList<DisplayTransactionListener> mDisplayTransactionListeners =
@@ -442,19 +442,19 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private void setHdmiMirroringEnabledInternal(boolean enabled) {
+    private void setPhoneMirroringEnabledInternal(boolean enabled) {
         synchronized(mSyncRoot) {
-            if (mHdmiMirroringEnabled != enabled) {
-                Slog.d(TAG, "setHdmiMirroringEnabledInternal -> " + enabled);
-                mHdmiMirroringEnabled = enabled;
+            if (mPhoneMirroringEnabled != enabled) {
+                Slog.d(TAG, "setPhoneMirroringEnabledInternal -> " + enabled);
+                mPhoneMirroringEnabled = enabled;
                 scheduleTraversalLocked(false);
             }
         }
     }
 
-    private boolean isHdmiMirroringEnabledInternal() {
+    private boolean isPhoneMirroringEnabledInternal() {
         synchronized(mSyncRoot) {
-            return mHdmiMirroringEnabled;
+            return mPhoneMirroringEnabled;
         }
     }
 
@@ -792,8 +792,6 @@ public final class DisplayManagerService extends SystemService {
         DisplayDeviceInfo deviceInfo = device.getDisplayDeviceInfoLocked();
         boolean isDefault = (deviceInfo.flags
                 & DisplayDeviceInfo.FLAG_DEFAULT_DISPLAY) != 0;
-        boolean isDefaultExternalDisplay = (deviceInfo.flags
-                & DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0;
         if (isDefault && mLogicalDisplays.get(Display.DEFAULT_DISPLAY) != null) {
             Slog.w(TAG, "Ignoring attempt to add a second default display: " + deviceInfo);
             isDefault = false;
@@ -805,7 +803,7 @@ public final class DisplayManagerService extends SystemService {
             return;
         }
 
-        final int displayId = assignDisplayIdLocked(isDefault, isDefaultExternalDisplay);
+        final int displayId = assignDisplayIdLocked(isDefault);
         final int layerStack = assignLayerStackLocked(displayId);
 
         LogicalDisplay display = new LogicalDisplay(displayId, layerStack, device);
@@ -827,14 +825,8 @@ public final class DisplayManagerService extends SystemService {
         sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_ADDED);
     }
 
-    private int assignDisplayIdLocked(boolean isDefault, boolean isDefaultExternalDisplay) {
-        if (isDefault) {
-            return Display.DEFAULT_DISPLAY;
-        } else if (isDefaultExternalDisplay) {
-            return Display.DEFAULT_EXTERNAL_DISPLAY;
-        } else {
-            return mNextNonDefaultDisplayId++;
-        }
+    private int assignDisplayIdLocked(boolean isDefault) {
+        return isDefault ? Display.DEFAULT_DISPLAY : mNextNonDefaultDisplayId++;
     }
 
     private int assignLayerStackLocked(int displayId) {
@@ -943,23 +935,33 @@ public final class DisplayManagerService extends SystemService {
     private void configureDisplayInTransactionLocked(DisplayDevice device) {
         final DisplayDeviceInfo info = device.getDisplayDeviceInfoLocked();
         final boolean ownContent = (info.flags & DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY) != 0;
+        int layerStackOverride = -1;
 
         // Find the logical display that the display device is showing.
         // Certain displays only ever show their own content.
         LogicalDisplay display = findLogicalDisplayForDeviceLocked(device);
-        if ((info.flags & DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY) != 0) {
-            if (isHdmiMirroringEnabledInternal()) {
-                display = mLogicalDisplays.get(Display.DEFAULT_DISPLAY);
+        if (!ownContent) {
+            if (display != null && !display.hasContentLocked()) {
+                // If the display does not have any content of its own, then
+                // automatically mirror the default logical display contents.
+                display = null;
             }
-        } else { // stock logic
-            if (!ownContent) {
-                if (display != null && !display.hasContentLocked()) {
-                    // If the display does not have any content of its own, then
-                    // automatically mirror the default logical display contents.
-                    display = null;
-                }
-                if (display == null) {
+            if (display == null) {
+                // This is the mirroring case.
+                //
+                // We basically swap between mirroring default display or desktop display.
+                // In the case of default display, there is a logical display around. But
+                // for desktop display, we don't have a logical display and just set the
+                // layerstack of the display device to the desktop's reserved layerstack.
+                if (isPhoneMirroringEnabledInternal()) {
+                    // Stock phone mirroring path
                     display = mLogicalDisplays.get(Display.DEFAULT_DISPLAY);
+                } else {
+                    // Desktop mirroring path
+                    // Use the associated logical display for this device as usual
+                    display = findLogicalDisplayForDeviceLocked(device);
+                    // ...but override the logical display's layerstack with the desktop layerstack
+                    layerStackOverride = Display.DEFAULT_DESKTOP_DISPLAY;
                 }
             }
         }
@@ -971,7 +973,8 @@ public final class DisplayManagerService extends SystemService {
                     + device.getDisplayDeviceInfoLocked());
             return;
         }
-        display.configureDisplayInTransactionLocked(device, info.state == Display.STATE_OFF);
+        display.configureDisplayInTransactionLocked(device, info.state == Display.STATE_OFF,
+                layerStackOverride);
 
         // Update the viewports if needed.
         if (!mDefaultViewport.valid
@@ -1258,30 +1261,30 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
-        public void enableHdmiMirroring() {
+        public void enablePhoneMirroring() {
             final long token = Binder.clearCallingIdentity();
             try {
-                setHdmiMirroringEnabledInternal(true);
+                setPhoneMirroringEnabledInternal(true);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override // Binder call
-        public void disableHdmiMirroring() {
+        public void disablePhoneMirroring() {
             final long token = Binder.clearCallingIdentity();
             try {
-                setHdmiMirroringEnabledInternal(false);
+                setPhoneMirroringEnabledInternal(false);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override // Binder call
-        public boolean isHdmiMirroringEnabled() {
+        public boolean isPhoneMirroringEnabled() {
             final long token = Binder.clearCallingIdentity();
             try {
-                return isHdmiMirroringEnabledInternal();
+                return isPhoneMirroringEnabledInternal();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }

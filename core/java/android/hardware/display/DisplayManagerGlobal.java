@@ -19,7 +19,6 @@
 package android.hardware.display;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.media.projection.MediaProjection;
 import android.media.projection.IMediaProjection;
@@ -262,25 +261,25 @@ public final class DisplayManagerGlobal {
         }
     }
 
-    public void enableHdmiMirroring() {
+    public void enablePhoneMirroring() {
         try {
-            mDm.enableHdmiMirroring();
+            mDm.enablePhoneMirroring();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to enable mirroring with display manager service.", ex);
         }
     }
 
-    public void disableHdmiMirroring() {
+    public void disablePhoneMirroring() {
         try {
-            mDm.disableHdmiMirroring();
+            mDm.disablePhoneMirroring();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to disable mirroring with display manager service.", ex);
         }
     }
 
-    public boolean isHdmiMirroringEnabled() {
+    public boolean isPhoneMirroringEnabled() {
         try {
-            return mDm.isHdmiMirroringEnabled();
+            return mDm.isPhoneMirroringEnabled();
         } catch (RemoteException ex) {
             Log.e(TAG, "Failed to get mirroring configuration from display manager service.", ex);
         }

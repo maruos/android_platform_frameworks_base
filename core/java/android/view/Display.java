@@ -96,12 +96,10 @@ public final class Display {
     public static final int DEFAULT_DISPLAY = 0;
 
     /**
-     * maru
-     *
-     * Fixed display id for the default external display. Currently only HDMI.
+     * The default Display id for the desktop, which is the id of Maru Desktop's "virtual" display.
      * @hide
      */
-    public static final int DEFAULT_EXTERNAL_DISPLAY = 1;
+    public static final int DEFAULT_DESKTOP_DISPLAY = 1;
 
     /**
      * Invalid display id.
