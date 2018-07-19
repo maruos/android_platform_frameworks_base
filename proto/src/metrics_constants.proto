@@ -1,4 +1,5 @@
 // Copyright (C) 2016 The Android Open Source Project
+// Copyright (C) 2018 The Maru OS Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -4621,6 +4622,10 @@ message MetricsEvent {
     // CATEGORY: QUICK_SETTINGS
     // OS: 6.0
     QS_MMIRROR_TOGGLE = 9000;
+
+    // MARU
+    // OPEN: Settings > Desktop
+    SETTINGS_DESKTOP_CATEGORY = 9001;
 
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS
