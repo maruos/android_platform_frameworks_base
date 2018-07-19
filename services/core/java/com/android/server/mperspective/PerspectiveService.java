@@ -39,6 +39,7 @@ import android.util.SparseArray;
 import android.view.Display;
 
 import com.android.internal.R;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.server.FgThread;
 import com.android.server.SystemService;
 
@@ -259,18 +260,18 @@ public class PerspectiveService extends IPerspectiveService.Stub {
 
             final Intent intent = Intent.makeRestartActivityTask(
                     new ComponentName("com.android.settings",
-                            "com.android.settings.Settings$MDesktopSettingsActivity"));
+                            "com.android.settings.Settings$DesktopDashboardActivity"));
             final PendingIntent pendingIntent = PendingIntent.getActivityAsUser(mContext, 0,
                     intent, 0, null, UserHandle.CURRENT);
 
-            final Notification notification = new Notification.Builder(mContext)
+            final Notification notification = new Notification.Builder(mContext, SystemNotificationChannels.ALERTS)
                     .setContentTitle(mContext.getText(title))
                     .setContentText(mContext.getText(msg))
+                    .setTicker(mContext.getText(title))
                     .setSmallIcon(icon)
                     .setContentIntent(pendingIntent)
-                    .setShowWhen(false)
                     .setOngoing(true)
-                    .setColor(mContext.getResources().getColor(color))
+                    .setColor(mContext.getColor(color))
                     .setVisibility(Notification.VISIBILITY_PUBLIC)
                     .build();
 
