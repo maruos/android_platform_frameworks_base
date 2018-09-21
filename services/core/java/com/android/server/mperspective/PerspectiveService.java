@@ -33,6 +33,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.SparseArray;
@@ -99,7 +100,7 @@ public class PerspectiveService extends IPerspectiveService.Stub {
 
     private int mDesktopState;
 
-    private boolean mHDMIAutoStart = true;
+    private boolean mPublicPresentationAutoStart = true;
     private final MDisplayListener mDisplayListener;
 
     private final int mDesktopNotificationId = R.string.desktop_notification_msg;
@@ -109,6 +110,10 @@ public class PerspectiveService extends IPerspectiveService.Stub {
     private static final int MSG_START_DESKTOP = 0;
     private static final int MSG_STOP_DESKTOP = 1;
     private static final int MSG_UPDATE_DESKTOP_STATE = 2;
+    private static final int MSG_DISABLE_DESKTOP_INTERACTIVE = 3;
+    private static final int MSG_ENABLE_DESKTOP_INTERACTIVE = 4;
+
+    private static final String PROPERTY_MARUOS_DESKTOP_INTERACTIVE = "sys.maruos.desktop.interactive";
 
     public PerspectiveService(Context context) {
         mContext = context;
@@ -140,6 +145,20 @@ public class PerspectiveService extends IPerspectiveService.Stub {
         mHandler.sendEmptyMessage(MSG_UPDATE_DESKTOP_STATE);
     }
 
+    private void scheduleUpdateDesktopInteractiveState(boolean enable) {
+        mHandler.sendEmptyMessage(
+                enable ? MSG_ENABLE_DESKTOP_INTERACTIVE : MSG_DISABLE_DESKTOP_INTERACTIVE
+        );
+    }
+
+    private void updateDesktopInteractiveStateLocked(boolean enable) {
+        SystemProperties.set(PROPERTY_MARUOS_DESKTOP_INTERACTIVE, String.valueOf(enable));
+        boolean updateResult = nativeEnableInput(mNativeClient, enable);
+        if (!updateResult) {
+            Log.w(TAG, "Update desktop interactive state failed");
+        }
+    }
+
     private void updateDesktopStateLocked(int state) {
         Log.d(TAG, "mDesktopState: " + Perspective.stateToString(mDesktopState)
                 + " -> " + Perspective.stateToString(state));
@@ -148,6 +167,12 @@ public class PerspectiveService extends IPerspectiveService.Stub {
             updateDesktopNotificationLocked();
             dispatchEventLocked(state);
         }
+        boolean isPublicPresentationConnected =
+                mDisplayListener != null && mDisplayListener.isPublicPresentationConnected();
+        boolean isDesktopRunning = mDesktopState == Perspective.STATE_RUNNING;
+        boolean shouldEnableDesktopInteractiveState =
+                isPublicPresentationConnected && isDesktopRunning;
+        updateDesktopInteractiveStateLocked(shouldEnableDesktopInteractiveState);
     }
 
     private void updateDesktopState() {
@@ -352,6 +377,12 @@ public class PerspectiveService extends IPerspectiveService.Stub {
             }
         }
 
+        private void updateDesktopInteractiveStateInternal(boolean enable) {
+            synchronized (mLock) {
+                updateDesktopInteractiveStateLocked(enable);
+            }
+        }
+
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -364,25 +395,31 @@ public class PerspectiveService extends IPerspectiveService.Stub {
                 case MSG_UPDATE_DESKTOP_STATE:
                     updateDesktopState();
                     break;
+                case MSG_DISABLE_DESKTOP_INTERACTIVE:
+                    updateDesktopInteractiveStateInternal(false);
+                    break;
+                case MSG_ENABLE_DESKTOP_INTERACTIVE:
+                    updateDesktopInteractiveStateInternal(true);
+                    break;
             }
         }
     }
 
     private class MDisplayListener implements DisplayManager.DisplayListener {
-        // track the hdmi display id to check if it has been removed later
-        private int mHdmiDisplayId = -1;
+        // track the public presentation display id to check if it has been removed later
+        private int mPublicPresentationDisplayId = -1;
 
         @Override
         public void onDisplayAdded(int displayId) {
             Display display = mDisplayManager.getDisplay(displayId);
-            final boolean hdmiDisplayAdded = display.getType() == Display.TYPE_HDMI;
 
-            if (hdmiDisplayAdded) {
-                if (mHdmiDisplayId == -1) {
-                    mHdmiDisplayId = displayId;
-                    if (mHDMIAutoStart) {
-                        Log.i(TAG, "HDMI display added, scheduling desktop start...");
+            if (display.isPublicPresentation()) {
+                if (mPublicPresentationDisplayId == -1) {
+                    mPublicPresentationDisplayId = displayId;
+                    if (mPublicPresentationAutoStart) {
+                        Log.i(TAG, "Public presentation display added, scheduling desktop start...");
                         scheduleStartDesktopPerspective();
+                        scheduleUpdateDesktopInteractiveState(true);
                     }
                 }
             }
@@ -390,20 +427,26 @@ public class PerspectiveService extends IPerspectiveService.Stub {
 
         @Override
         public void onDisplayRemoved(int displayId) {
-            if (displayId == mHdmiDisplayId) {
-                if (mHdmiDisplayId != -1) {
-                    mHdmiDisplayId = -1;
+            if (displayId == mPublicPresentationDisplayId) {
+                if (mPublicPresentationDisplayId != -1) {
+                    mPublicPresentationDisplayId = -1;
+                    scheduleUpdateDesktopInteractiveState(false);
                 }
             }
         }
 
         @Override
         public void onDisplayChanged(int displayId) { /* no-op */ }
+
+        boolean isPublicPresentationConnected() {
+            return mPublicPresentationDisplayId >= 0;
+        }
     }
 
     private static native long nativeCreateClient();
     private static native boolean nativeStart(long ptr);
     private static native boolean nativeStop(long ptr);
     private static native boolean nativeIsRunning(long ptr);
+    private static native boolean nativeEnableInput(long ptr, boolean enable);
 
 }
