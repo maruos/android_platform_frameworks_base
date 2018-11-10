@@ -21,6 +21,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.display.DisplayManager;
@@ -35,6 +36,7 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
@@ -87,6 +89,7 @@ public class PerspectiveService extends IPerspectiveService.Stub {
     }
 
     private Context mContext;
+    private ContentResolver mResolver;
     private DisplayManager mDisplayManager;
     private NotificationManager mNotificationManager;
 
@@ -117,6 +120,7 @@ public class PerspectiveService extends IPerspectiveService.Stub {
 
     public PerspectiveService(Context context) {
         mContext = context;
+        mResolver = mContext == null ? null : mContext.getContentResolver();
         mDisplayListener = new MDisplayListener();
         mCallbacks = new SparseArray<CallbackWrapper>();
         mHandler = new PerspectiveHandler(FgThread.get().getLooper());
@@ -156,6 +160,16 @@ public class PerspectiveService extends IPerspectiveService.Stub {
         boolean updateResult = nativeEnableInput(mNativeClient, enable);
         if (!updateResult) {
             Log.w(TAG, "Update desktop interactive state failed");
+        } else {
+            if (mResolver != null) {
+                Settings.Secure.putInt(
+                        mResolver,
+                        Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD,
+                        enable ? 1 : 0
+                );
+            } else {
+                Log.w(TAG, "Set SHOW_IME_WITH_HARD_KEYBOARD failed because of the mResolver is null");
+            }
         }
     }
 
