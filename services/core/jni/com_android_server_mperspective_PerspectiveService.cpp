@@ -76,6 +76,10 @@ public:
         return mProxy != NULL && mProxy->isRunning();
     }
 
+    bool enableInput(bool enable) {
+        return mProxy != NULL && mProxy->enableInput(enable);
+    }
+
 private:
     sp<IPerspectiveService> mProxy;
 
@@ -119,6 +123,11 @@ static jboolean nativeIsRunning(JNIEnv *env, jclass clazz, jlong ptr) {
     return client->isRunning();
 }
 
+static jboolean nativeEnableInput(JNIEnv *env, jclass clazz, jlong ptr, jboolean enable) {
+    PerspectiveClient *client = reinterpret_cast<PerspectiveClient*>(ptr);
+    return client->enableInput(enable);
+}
+
 static JNINativeMethod gMethods[] = {
     /* name, signature, funcPtr */
     { "nativeCreateClient", "()J",
@@ -128,7 +137,9 @@ static JNINativeMethod gMethods[] = {
     { "nativeStop", "(J)Z",
             (void *)nativeStop },
     { "nativeIsRunning", "(J)Z",
-            (void *)nativeIsRunning }
+            (void *)nativeIsRunning },
+    { "nativeEnableInput", "(JZ)Z",
+            (void *)nativeEnableInput}
 };
 
 int register_android_server_mperspective_PerspectiveService(JNIEnv* env) {

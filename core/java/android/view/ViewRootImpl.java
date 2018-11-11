@@ -155,6 +155,7 @@ public final class ViewRootImpl implements ViewParent,
     public static final String PROPERTY_EMULATOR_WIN_OUTSET_BOTTOM_PX =
             "ro.emu.win_outset_bottom_px";
 
+    private static final String PROPERTY_MARUOS_DESKTOP_INTERACTIVE = "sys.maruos.desktop.interactive";
     /**
      * Maximum time we allow the user to roll the trackball enough to generate
      * a key event, before resetting the counters.
@@ -4204,6 +4205,13 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         protected boolean shouldDropInputEvent(QueuedInputEvent q) {
+            boolean isDesktopInteractive =
+                    SystemProperties.getBoolean(PROPERTY_MARUOS_DESKTOP_INTERACTIVE, false);
+            InputDevice device = q.mEvent == null ? null : q.mEvent.getDevice();
+            boolean isExternal = device != null && device.isExternal();
+            if (isDesktopInteractive && isExternal) {
+                return true;
+            }
             if (mView == null || !mAdded) {
                 Slog.w(mTag, "Dropping event due to root view being removed: " + q.mEvent);
                 return true;
