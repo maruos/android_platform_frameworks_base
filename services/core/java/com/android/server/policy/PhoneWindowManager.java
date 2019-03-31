@@ -392,6 +392,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private static final String ACTION_TORCH_OFF =
             "com.android.server.policy.PhoneWindowManager.ACTION_TORCH_OFF";
+    private static final String PROPERTY_MARUOS_DESKTOP_INTERACTIVE = "sys.maruos.desktop.interactive";
 
     /**
      * Keyguard stuff
@@ -3762,6 +3763,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             Log.d(TAG, "interceptKeyTi keyCode=" + keyCode + " down=" + down + " repeatCount="
                     + repeatCount + " keyguardOn=" + keyguardOn + " mHomePressed=" + mHomePressed
                     + " canceled=" + canceled);
+        }
+        boolean isDesktopInteractive =
+                SystemProperties.getBoolean(PROPERTY_MARUOS_DESKTOP_INTERACTIVE, false);
+        InputDevice device = event == null ? null : event.getDevice();
+        boolean isExternal = device != null && device.isExternal();
+        if (isDesktopInteractive && isExternal) {
+            if (DEBUG_INPUT) {
+                Slog.d(TAG, "Intercept key event " + event + " before dispatching while desktop is interactive");
+            }
+            return -1;
         }
 
         // If we think we might have a volume down & power key chord on the way
