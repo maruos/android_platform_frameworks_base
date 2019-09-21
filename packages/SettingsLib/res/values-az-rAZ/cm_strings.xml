@@ -19,6 +19,11 @@
 */
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-  <!-- Description for the screen zoom level that makes interface elements smaller. [CHAR LIMIT=24] -->
-  <!-- Description for the screen zoom level that makes interface elements smallest. [CHAR LIMIT=24] -->
+    <string name="screen_zoom_summary_smaller">Daha kiçik</string>
+    <string name="screen_zoom_summary_smallest">Ən kiçik</string>
+    <string name="profile_applist_title">Tətbiqlər</string>
+    <string name="picker_activities">Fəaliyyətlər</string>
+    <string name="select_custom_app_title">Özəl tətbiq seç</string>
+    <string name="select_custom_activity_title">Özəl fəaliyyət seç</string>
+    <string name="lockscreen_targets_message">Kilid ekranı qısayolları</string>
 </resources>

@@ -17,32 +17,29 @@
      limitations under the License.
 -->
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-  <!-- Long-press back kill application -->
-  <!-- label for item that screenshots in phone options dialog -->
-  <!-- label for item that restarts the phone in phone options dialog -->
-  <!-- label for current user in phone options dialog -->
-  <!-- status message in phone options dialog for screenshot action -->
-  <!-- Restart menu -->
-  <!-- Button to restart the phone, within the Restart Options dialog -->
-  <!-- Button to restart the phone into recovery, within the Restart Options dialog -->
-  <!-- Button to restart the phone into bootloader, within the Restart Options dialog -->
-  <!-- Button to restart the phone into download, within the Restart Options dialog -->
-  <!-- Button to soft restart the device, within the Restart Options dialog -->
-  <!-- Title of dialog to confirm restarting. -->
-  <!-- Restart Confirmation Dialog.  When the user chooses to restart the device, there will
-         be a confirmation dialog.  This is the message. -->
-  <!-- Restart Progress Dialog. This is shown if the user chooses to restart the phone. -->
-  <!-- ADB over network notification -->
-  <!-- ADB over USB and network notification -->
-  <!-- ADB notification message-->
-  <!-- Privacy Guard -->
-  <!-- Text of the checkbox for the permission confirmation dialog to remember the user's choice. [CHAR LIMIT=40] -->
-  <!-- App ops requests -->
-  <!-- Protected Apps Notification -->
-  <!-- Notify user that they are in Lock-to-app (for devices without navbar) -->
-  <!-- Message to show the user when their vendor image doesn't match the build's fingerprint. -->
-  <!-- Single hand mode -->
-  <!-- Strings for tethered notification -->
-  <!-- Shown when the device is tethered -->
-  <!-- Zen mode buttons -->
+    <string name="global_action_reboot">Pokreni ponovo</string>
+    <string name="global_action_current_user">Trenutni</string>
+    <string name="reboot_reboot">Pokreni ponovo</string>
+    <string name="reboot_title">Pokreni ponovo</string>
+    <string name="reboot_confirm" product="tablet">Vaš tablet će se resetovati.</string>
+    <string name="reboot_confirm" product="default">Vaš mobitel će se resetovati.</string>
+    <string name="reboot_progress">Resetujem\u2026</string>
+    <string name="adb_net_active_notification_title">ADB preko mreže omogućen</string>
+    <string name="privacy_guard_notification">Čuvar privatnosti aktivan</string>
+    <string name="privacy_guard_dialog_title">Čuvar privatnosti</string>
+    <string name="permission_remember_choice">Zapamti moj odabir</string>
+    <string name="app_ops_access_camera">pristup kameri</string>
+    <string name="app_ops_access_location">pristup lokaciji</string>
+    <string name="app_ops_access_notifications">čita vaše obavijesti</string>
+    <string name="app_ops_activate_vpn">aktivira VPN</string>
+    <string name="app_ops_auto_start">pokrene se prilikom paljenja</string>
+    <string name="app_ops_delete_contacts">briše vaše kontakte</string>
+    <string name="app_ops_delete_mms">briše vaše MMS poruke</string>
+    <string name="app_ops_delete_sms">briše vaše SMS poruke</string>
+    <string name="app_ops_make_phone_call">pozivanje telefonskih brojeva</string>
+    <string name="app_ops_read_call_log">čita vaš zapisnik poziva</string>
+    <string name="app_ops_read_contacts">čita vaše kontakte</string>
+    <string name="app_ops_read_mms">čita vaše MMS poruke</string>
+    <string name="app_ops_read_sms">čita vaše SMS poruke</string>
+    <string name="silent_mode_none">Ništa</string>
 </resources>
