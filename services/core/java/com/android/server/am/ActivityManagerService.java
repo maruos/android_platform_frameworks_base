@@ -3645,7 +3645,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             final int procCount = procs.size();
             for (int i = 0; i < procCount; i++) {
                 final int procUid = procs.keyAt(i);
-                if (UserHandle.isApp(procUid) || !UserHandle.isSameUser(procUid, uid)) {
+                if (UserHandle.isApp(procUid) || !UserHandle.isSameUser(procUid, uid)
+                        || UserHandle.isIsolated(procUid)) {
                     // Don't use an app process or different user process for system component.
                     continue;
                 }
@@ -5211,7 +5212,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void crashApplication(int uid, int initialPid, String packageName, int userId,
-            String message) {
+            String message, boolean force) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: crashApplication() from pid="
@@ -5223,7 +5224,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         synchronized(this) {
-            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId, message);
+            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId,
+                    message, force);
         }
     }
 
@@ -6986,7 +6988,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    private final boolean attachApplicationLocked(IApplicationThread thread,
+    private boolean attachApplicationLocked(@NonNull IApplicationThread thread,
             int pid) {
 
         // Find the application record that is being attached...  either via
@@ -7291,6 +7293,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public final void attachApplication(IApplicationThread thread) {
+        if (thread == null) {
+            throw new SecurityException("Invalid application interface");
+        }
         synchronized (this) {
             int callingPid = Binder.getCallingPid();
             final long origId = Binder.clearCallingIdentity();
