@@ -338,12 +338,15 @@ final class LogicalDisplay {
      *
      * @param device The display device to modify.
      * @param isBlanked True if the device is being blanked.
+     * @param layerStackOverride The layerstack to associate the device with, or
+     *                           < 0 to use the primary display device's layerstack
      */
     public void configureDisplayLocked(SurfaceControl.Transaction t,
             DisplayDevice device,
-            boolean isBlanked) {
+            boolean isBlanked, int layerStackOverride) {
         // Set the layer stack.
-        device.setLayerStackLocked(t, isBlanked ? BLANK_LAYER_STACK : mLayerStack);
+        int layerStack = layerStackOverride < 0 ? mLayerStack : layerStackOverride;
+        device.setLayerStackLocked(t, isBlanked ? BLANK_LAYER_STACK : layerStack);
 
         // Set the color mode and mode.
         if (device == mPrimaryDisplayDevice) {
@@ -423,6 +426,17 @@ final class LogicalDisplay {
         mTempDisplayRect.top += mDisplayOffsetY;
         mTempDisplayRect.bottom += mDisplayOffsetY;
         device.setProjectionLocked(t, orientation, mTempLayerStackRect, mTempDisplayRect);
+    }
+
+    /**
+     * Stock method signature that uses the associated physical display's layer stack as usual.
+     *
+     * @param t
+     * @param device
+     * @param isBlanked
+     */
+    public void configureDisplayLocked(SurfaceControl.Transaction t, DisplayDevice device, boolean isBlanked) {
+        configureDisplayLocked(t, device, isBlanked, -1);
     }
 
     /**

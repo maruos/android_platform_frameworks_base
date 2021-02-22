@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -441,6 +443,15 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
                     if (res.getBoolean(com.android.internal.R.bool.config_localDisplaysPrivate)) {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_PRIVATE;
+                    }
+                    /*
+                     * maru
+                     *
+                     * Debug hook to toggle maru changes.
+                     */
+                    if (SystemProperties.getBoolean("persist.maru.desktop.hdmi", true)) {
+                        /* HDMI displays are the default external display */
+                        mInfo.flags |= DisplayDeviceInfo.FLAG_DEFAULT_EXTERNAL_DISPLAY;
                     }
                 }
             }

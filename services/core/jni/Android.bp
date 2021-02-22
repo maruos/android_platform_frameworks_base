@@ -50,12 +50,14 @@ cc_library_static {
         "com_android_server_PersistentDataBlockService.cpp",
         "com_android_server_GraphicsStatsService.cpp",
         "onload.cpp",
+        "com_android_server_mperspective_PerspectiveService.cpp",
     ],
 
     include_dirs: [
         "frameworks/base/libs",
         "frameworks/native/services",
         "system/gatekeeper/include",
+        "vendor/maruos/include",
     ],
 
     product_variables: {
@@ -131,6 +133,7 @@ cc_defaults {
         "android.frameworks.schedulerservice@1.0",
         "android.frameworks.sensorservice@1.0",
         "vendor.lineage.power@1.0",
+        "libperspective",
     ],
 
     static_libs: [

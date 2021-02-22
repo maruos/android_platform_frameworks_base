@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -278,6 +280,31 @@ public final class DisplayManagerGlobal {
                 mDisplayListeners.get(i).sendDisplayEvent(displayId, event);
             }
         }
+    }
+
+    public void enablePhoneMirroring() {
+        try {
+            mDm.enablePhoneMirroring();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to enable mirroring with display manager service.", ex);
+        }
+    }
+
+    public void disablePhoneMirroring() {
+        try {
+            mDm.disablePhoneMirroring();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to disable mirroring with display manager service.", ex);
+        }
+    }
+
+    public boolean isPhoneMirroringEnabled() {
+        try {
+            return mDm.isPhoneMirroringEnabled();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to get mirroring configuration from display manager service.", ex);
+        }
+        return false;
     }
 
     public void startWifiDisplayScan() {

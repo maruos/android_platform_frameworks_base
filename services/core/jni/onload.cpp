@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2009 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,6 +59,9 @@ int register_android_server_net_NetworkStatsService(JNIEnv* env);
 #ifdef USE_ARC
 int register_android_server_ArcVideoService();
 #endif
+
+// maru
+int register_android_server_mperspective_PerspectiveService(JNIEnv* env);
 };
 
 using namespace android;
@@ -107,5 +112,8 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
 #ifdef USE_ARC
     register_android_server_ArcVideoService();
 #endif
+    // maru
+    register_android_server_mperspective_PerspectiveService(env);
+
     return JNI_VERSION_1_4;
 }

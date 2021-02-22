@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,6 +77,8 @@ import android.media.session.MediaSessionManager;
 import android.media.soundtrigger.SoundTriggerManager;
 import android.media.tv.ITvInputManager;
 import android.media.tv.TvInputManager;
+import android.mperspective.IPerspectiveService;
+import android.mperspective.PerspectiveManager;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityThread;
 import android.net.EthernetManager;
@@ -561,6 +565,14 @@ final class SystemServiceRegistry {
             public SerialManager createService(ContextImpl ctx) throws ServiceNotFoundException {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.SERIAL_SERVICE);
                 return new SerialManager(ctx, ISerialManager.Stub.asInterface(b));
+            }});
+
+        registerService(Context.PERSPECTIVE_SERVICE, PerspectiveManager.class,
+                new CachedServiceFetcher<PerspectiveManager>() {
+            @Override
+            public PerspectiveManager createService(ContextImpl ctx) {
+                IBinder b = ServiceManager.getService(Context.PERSPECTIVE_SERVICE);
+                return new PerspectiveManager(IPerspectiveService.Stub.asInterface(b));
             }});
 
         registerService(Context.VIBRATOR_SERVICE, Vibrator.class,

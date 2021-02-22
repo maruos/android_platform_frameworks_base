@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2006 The Android Open Source Project
+ * Copyright (C) 2015-2016 Preetam J. D'Souza
+ * Copyright (C) 2016 The Maru OS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,6 +100,15 @@ public final class Display {
      * assuming there is one.
      */
     public static final int DEFAULT_DISPLAY = 0;
+
+    /**
+     * maru
+     *
+     * Fixed display id for the default external display. Currently only HDMI.
+     * The default Display id for the desktop, which is the id of Maru Desktop's "virtual" display.
+     * @hide
+     */
+    public static final int DEFAULT_DESKTOP_DISPLAY = 1;
 
     /**
      * Invalid display id.
