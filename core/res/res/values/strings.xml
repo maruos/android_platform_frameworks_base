@@ -4995,4 +4995,10 @@
     <!-- Strings for car -->
     <!-- String displayed when loading a user in the car [CHAR LIMIT=30] -->
     <string name="car_loading_profile">Loading</string>
+    <!-- maru -->
+    <string name="desktop_notification_title_starting">Maru Desktop starting...</string>
+    <string name="desktop_notification_title_stopping">Maru Desktop stopping...</string>
+    <string name="desktop_notification_title_running">Maru Desktop running</string>
+    <string name="desktop_notification_msg">Touch to manage desktop settings.</string>
+    <!-- /maru -->
 </resources>

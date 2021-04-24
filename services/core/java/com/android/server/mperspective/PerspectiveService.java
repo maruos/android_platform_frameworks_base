@@ -16,8 +16,13 @@
  */
 package com.android.server.mperspective;
 
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.display.DisplayManager;
 import android.hardware.input.InputManager;
 import android.mperspective.IPerspectiveService;
@@ -30,14 +35,17 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.InputDevice;
+
+import com.android.internal.R;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.server.FgThread;
 import com.android.server.SystemService;
-
 /**
  * PerspectiveService is the central entity in perspective management.
  *
@@ -83,6 +91,7 @@ public class PerspectiveService extends IPerspectiveService.Stub {
     private Context mContext;
     private ContentResolver mResolver;
     private DisplayManager mDisplayManager;
+    private NotificationManager mNotificationManager;
     private InputManager mInputManager;
 
     // wrapper to sp<IPerspectiveService>
@@ -98,6 +107,9 @@ public class PerspectiveService extends IPerspectiveService.Stub {
     private boolean mPublicPresentationAutoStart = true;
     private final MDisplayListener mDisplayListener;
     private final MInputDeviceListener mInputDeviceListener;
+
+    private final int mDesktopNotificationId = R.string.desktop_notification_msg;
+    private boolean mShowingDesktopNotification = false;
 
     private final PerspectiveHandler mHandler;
     private static final int MSG_START_DESKTOP = 0;
@@ -118,9 +130,9 @@ public class PerspectiveService extends IPerspectiveService.Stub {
     }
 
     private void systemReady() {
-        mDisplayManager = (DisplayManager) mContext
-                .getSystemService(Context.DISPLAY_SERVICE);
+        mDisplayManager = (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
         mDisplayManager.registerDisplayListener(mDisplayListener, FgThread.getHandler());
+        mNotificationManager =(NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
         mInputManager = InputManager.getInstance();
         mInputManager.registerInputDeviceListener(mInputDeviceListener, FgThread.getHandler());
         mNativeClient = nativeCreateClient();
@@ -179,6 +191,7 @@ public class PerspectiveService extends IPerspectiveService.Stub {
                 + " -> " + Perspective.stateToString(state));
         if (mDesktopState != state) {
             mDesktopState = state;
+            updateDesktopNotificationLocked();
             dispatchEventLocked(state);
         }
         boolean isPublicPresentationConnected =
@@ -277,6 +290,48 @@ public class PerspectiveService extends IPerspectiveService.Stub {
         }
 
         registerCallbackInternal(callback, Binder.getCallingPid());
+    }
+
+    private void updateDesktopNotificationLocked() {
+        if (mDesktopState == Perspective.STATE_STOPPED) {
+            if (mShowingDesktopNotification) {
+                mNotificationManager.cancel(mDesktopNotificationId);
+                mShowingDesktopNotification = false;
+            }
+        } else {
+            int title = R.string.desktop_notification_title_running;
+            if (mDesktopState == Perspective.STATE_STARTING) {
+                title = R.string.desktop_notification_title_starting;
+            } else if (mDesktopState == Perspective.STATE_STOPPING) {
+                title = R.string.desktop_notification_title_stopping;
+            }
+
+            final int msg = R.string.desktop_notification_msg;
+            final int color = R.color.system_notification_accent_color;
+            final int icon = R.drawable.ic_mdesktop;
+
+            final Intent intent = Intent.makeRestartActivityTask(
+                    new ComponentName("com.maru.settings",
+                            "com.maru.settings.MaruSettings$DesktopDashboardActivity"));
+            final PendingIntent pendingIntent = PendingIntent.getActivityAsUser(mContext, 0,
+                    intent, 0, null, UserHandle.CURRENT);
+
+            final Notification notification =
+                    new Notification
+                            .Builder(mContext, SystemNotificationChannels.ALERTS)
+                            .setContentTitle(mContext.getText(title))
+                            .setContentText(mContext.getText(msg))
+                            .setTicker(mContext.getText(title))
+                            .setSmallIcon(icon)
+                            .setContentIntent(pendingIntent)
+                            .setOngoing(true)
+                            .setColor(mContext.getColor(color))
+                            .setVisibility(Notification.VISIBILITY_PUBLIC)
+                            .build();
+
+            mNotificationManager.notifyAsUser(null, mDesktopNotificationId, notification, UserHandle.ALL);
+            mShowingDesktopNotification = true;
+        }
     }
 
     /**
